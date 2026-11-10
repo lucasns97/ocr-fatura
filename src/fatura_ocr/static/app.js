@@ -202,7 +202,8 @@ $("#delim").addEventListener("change", refreshCsv);
 // Copiar para planilha: Google Sheets/Excel só separam em colunas texto com TAB (ou uma tabela HTML),
 // então a cópia usa esses formatos, qualquer que seja o separador escolhido para o arquivo.
 const HEAD = ["Data", "Lançamento", "Categoria", "Tipo", "Valor"], COLS = ["data", "lancamento", "categoria", "tipo", "valor"];
-const tsvCell = (v) => String(v).replace(/[\t\r\n]+/g, " ");
+// tab/quebra de linha viram espaço; campo com aspas é citado (senão a planilha junta células)
+const tsvCell = (v) => { const s = String(v).replace(/[\t\r\n]+/g, " "); return s.includes('"') ? '"' + s.replace(/"/g, '""') + '"' : s; };
 function tableText() {
   return [HEAD, ...S.rows.map((r) => COLS.map((c) => r[c]))].map((row) => row.map(tsvCell).join("\t")).join("\r\n");
 }
@@ -212,7 +213,8 @@ function tableHtml() {
 }
 function copyFallback(text) { // navegadores sem API de área de transferência
   const t = document.createElement("textarea"); t.value = text; t.style.position = "fixed"; t.style.opacity = "0";
-  document.body.append(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok;
+  document.body.append(t); t.select();
+  try { return document.execCommand("copy"); } catch { return false; } finally { t.remove(); }
 }
 $("#copy").addEventListener("click", async () => {
   const text = tableText();
