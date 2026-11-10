@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import socket
+import sys
 import threading
 import webbrowser
 
@@ -12,6 +13,10 @@ HOST = "127.0.0.1"
 def free_port(preferred: int) -> int:
     for port in (preferred, 0):
         with socket.socket() as s:
+            if sys.platform.startswith("linux"):
+                # reabrir logo depois de fechar não cai numa porta aleatória. Só no Linux: lá a opção
+                # ainda recusa uma porta em uso; no Windows e no macOS ela pode deixar dividir a porta.
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 s.bind((HOST, port))
                 return s.getsockname()[1]

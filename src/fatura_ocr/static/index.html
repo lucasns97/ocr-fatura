@@ -13,8 +13,8 @@
 </header>
 
 <main>
-  <section class="card" id="step-form">
-    <h2><span class="n">1</span> Dados da fatura</h2>
+  <details class="card step" id="step-form" open>
+    <summary><h2><span class="n">1</span> Dados da fatura</h2><span class="sum" id="sum-form"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
     <div class="grid">
       <label><span>Mês da fatura (vencimento)</span>
         <span class="row">
@@ -34,10 +34,10 @@
         <small>Define o ano de cada compra: o app mostra só "23 de ago". Vazio = último dia do mês anterior ao vencimento.</small>
       </label>
     </details>
-  </section>
+  </details>
 
-  <section class="card" id="step-files">
-    <h2><span class="n">2</span> Capturas de tela</h2>
+  <details class="card step" id="step-files" open>
+    <summary><h2><span class="n">2</span> Capturas de tela</h2><span class="sum" id="sum-files"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
     <div id="drop" class="drop" tabindex="0" role="button" aria-label="Escolher capturas de tela">
       <strong>Arraste as capturas aqui</strong> ou <u>clique para escolher</u>
       <small>PNG ou JPG da tela "Faturas", em ordem de cima para baixo. Capturas que se repetem parcialmente são tratadas.</small>
@@ -48,7 +48,7 @@
       <button id="go" class="primary" disabled>Ler capturas</button>
       <span id="status" class="muted" role="status"></span>
     </div>
-  </section>
+  </details>
 
   <section id="results" hidden>
     <div id="warnings"></div>
@@ -67,9 +67,9 @@
         <button id="reset" class="ghost" hidden>Voltar à leitura automática</button>
         <span class="spacer"></span>
         <button id="copy" class="icon" title="Copia como tabela: cola em colunas no Google Sheets e no Excel">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copiar para planilha</button>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copiar para planilha</button>
         <button id="savecsv" class="icon" title="Salva o arquivo fatura-inter-AAAA-MM.csv">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Salvar CSV</button>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Salvar CSV</button>
       </div>
       <div class="toolbar sub">
         <label class="inline"><input id="remember" type="checkbox" checked> Lembrar nomes corrigidos nas próximas faturas</label>
