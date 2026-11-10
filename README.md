@@ -64,7 +64,8 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
    Nomes de estabelecimentos corrigidos são lembrados nas próximas faturas (dá para desligar).
 5. Ainda na **Tabela**:
    - **Copiar para planilha**: no Google Sheets ou no Excel, clique em uma célula e cole (Ctrl+V); cada coluna vai
-     para o lugar certo.
+     para o lugar certo. O **Valor vai como número** (ex.: `1896,14`, pagamentos negativos), então a planilha
+     soma; para ver como dinheiro, use Formatar → Número → Moeda (planilha em português).
    - **Salvar CSV**: no Chrome e no Edge abre a janela "Salvar como" do Windows, já com o nome
      `fatura-inter-AAAA-MM.csv`, para você escolher a pasta. Em outros navegadores, o arquivo é baixado como um download comum (normalmente na pasta Downloads).
 6. A aba **Resumo** mostra o total, o gasto por categoria, os maiores estabelecimentos, à vista × parcelado e as compras por mês.
