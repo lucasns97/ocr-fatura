@@ -23,10 +23,12 @@ Precisa de internet só na instalação. Escolha **um** dos jeitos:
 
 **A) Colar um comando (mais rápido)**
 1. Aperte a tecla Windows, digite **PowerShell** e abra.
-2. Cole esta linha e aperte Enter:
+2. Cole esta linha **inteira** e aperte Enter:
    ```powershell
-   irm https://raw.githubusercontent.com/lucasns97/ocr-fatura/main/instalar.ps1 | iex
+   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/lucasns97/ocr-fatura/main/instalar.ps1 | iex
    ```
+   A primeira parte liga o TLS 1.2. Sem ela, o PowerShell do Windows pode falhar com
+   *"A conexão subjacente estava fechada: Erro inesperado em um envio"*.
 
 **B) Baixar e dar dois cliques**
 1. Nesta página, clique em **Code → Download ZIP** e extraia o arquivo.
@@ -63,7 +65,7 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
 
 ## Atualizar e desinstalar
 
-- **Atualizar:** rode o instalador de novo (o comando do item A, ou `instalar.cmd`). Feche o Fatura OCR antes.
+- **Atualizar:** rode o instalador de novo (o comando do item A, ou `instalar.cmd` na pasta do programa). Feche o Fatura OCR antes.
 - **Desinstalar:** dois cliques em `desinstalar.cmd` (na pasta `%LOCALAPPDATA%\FaturaOCR`). Os nomes corrigidos ficam em
   `%USERPROFILE%\.fatura-ocr`; apague essa pasta se quiser removê-los também.
   O uv e o Python que ele baixou continuam no computador; para removê-los, rode no PowerShell
