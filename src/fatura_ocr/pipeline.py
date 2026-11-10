@@ -169,11 +169,9 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
         res.warnings.append(
             f"{late} compra(s) com data depois do fechamento ({closing:%d/%m/%Y}). Se o ano estiver errado, "
             f"ajuste o fechamento em Avançado e leia de novo.")
-    for i, k in enumerate(removed):
-        if k:
-            res.stats.setdefault("overlaps", []).append({"between": [i + 1, i + 2], "removed": k})
     res.rows = rows
-    res.stats["images"] = len(images)
+    res.stats["images"] = len(screens)               # capturas lidas
+    res.stats["ignored_images"] = len(images) - len(screens)
     res.stats["rows"] = len(rows)
     res.stats["duplicates_removed"] = sum(removed)
     res.stats["closing"] = closing.isoformat()

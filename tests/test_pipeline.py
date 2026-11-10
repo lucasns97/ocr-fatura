@@ -115,8 +115,17 @@ class Process(unittest.TestCase):
             res = process_images([b"1", b"2", b"1", b"2"], 2026, 9, None, 300, AliasStore(Path(tmp) / "a.json"),
                                  read_lines=fake.__getitem__)
         self.assertEqual(len(res.rows), 2)
+        self.assertEqual((res.stats["images"], res.stats["ignored_images"]), (2, 2))
         self.assertTrue(res.stats["reconciliation"]["ok"])
         self.assertEqual(sum("igual à imagem" in w for w in res.warnings), 2)
+
+    def test_total_mismatch_is_left_to_the_page(self):
+        # a página recalcula a conferência a cada edição; o servidor não pode mandar uma mensagem fixa
+        s = screen(*tx("Sexta, 14 de ago", "Outros", "-R$ 1,00", "LOJA A"))
+        with tempfile.TemporaryDirectory() as tmp:
+            res = process_images([b"x"], 2026, 9, None, 999, AliasStore(Path(tmp) / "a.json"), read_lines=lambda _: (s, H))
+        self.assertFalse(res.stats["reconciliation"]["ok"])
+        self.assertFalse(any("total" in w for w in res.warnings))
 
     def test_date_carries_over_when_header_scrolled_off(self):
         s1 = screen(*tx("Sexta, 14 de ago", "Outros", "-R$ 1,00", "LOJA A"), *tx("", "Outros", "-R$ 2,00", "LOJA B"))

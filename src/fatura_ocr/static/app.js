@@ -130,7 +130,7 @@ function showResults(r) {
   r.warnings.forEach((t) => { const d = document.createElement("div"); d.className = "notice"; d.textContent = t; w.append(d); });
   const st = r.stats;
   const info = document.createElement("div"); info.className = "muted small"; info.style.marginBottom = "10px";
-  info.textContent = `${st.rows} transações de ${st.images} captura(s); ${st.duplicates_removed} repetida(s) por sobreposição removida(s).`;
+  info.textContent = `${st.rows} transações de ${st.images} captura(s)${st.ignored_images ? ` (${st.ignored_images} igual(is) ignorada(s))` : ""}; ${st.duplicates_removed} repetida(s) por sobreposição removida(s).`;
   w.append(info);
   renderTable(); renderBadge(); renderSummary(); renderRecon(); setTab("tabela");
   collapseSteps();
@@ -139,19 +139,25 @@ function showResults(r) {
 
 /* Conferência com o total e linhas a revisar: recalculada a partir da tabela salva (S.rows),
    então some ou muda assim que o usuário corrige e salva. */
+// Conferência com o total informado, a partir das linhas salvas (mesma regra de reconcile() no servidor:
+// bate se o total for a soma das compras ou o líquido com pagamentos/estornos). Usada na mensagem e no Resumo.
+function reconcile(rows) {
+  const rec0 = S.meta && S.meta.stats.reconciliation;
+  if (!rec0) return null;
+  const charges = rows.reduce((s, r) => s + (r.valor_centavos > 0 ? r.valor_centavos : 0), 0);
+  const net = rows.reduce((s, r) => s + (r.valor_centavos || 0), 0);
+  return { total: rec0.total, charges, net, ok: rec0.total === charges || rec0.total === net, diff: charges - rec0.total };
+}
 function renderRecon() {
   const el = $("#recon"); el.innerHTML = "";
   const add = (cls, text) => { const d = document.createElement("div"); d.className = "notice" + (cls ? " " + cls : ""); d.textContent = text; el.append(d); };
-  const rec0 = S.meta && S.meta.stats.reconciliation;
+  const rec = reconcile(S.rows);
   const toReview = S.rows.filter((r) => r.revisar).length;
   const reviewTxt = toReview ? ` ${toReview} linha(s) ainda marcada(s) com "revisar".` : "";
-  if (rec0) {
-    const charges = S.rows.reduce((s, r) => s + (r.valor_centavos > 0 ? r.valor_centavos : 0), 0);
-    const net = S.rows.reduce((s, r) => s + (r.valor_centavos || 0), 0);
-    const total = rec0.total, diff = charges - total;
-    if (total === charges || total === net) add("ok", `✓ A soma bate com o total informado (${fmt(total)}).` + reviewTxt);
-    else if (diff > 0) add("", `A soma das compras (${fmt(charges)}) passa do total informado (${fmt(total)}) em ${fmt(diff)}. Pode haver linhas repetidas (a mesma captura enviada duas vezes?) ou de outra fatura.` + reviewTxt);
-    else add("", `A soma das compras (${fmt(charges)}) é menor que o total informado (${fmt(total)}): faltam ${fmt(-diff)}. Pode faltar uma captura, ou o fechamento da fatura não é o padrão (Avançado).` + reviewTxt);
+  if (rec) {
+    if (rec.ok) add("ok", `✓ A soma bate com o total informado (${fmt(rec.total)}).` + reviewTxt);
+    else if (rec.diff > 0) add("", `A soma das compras (${fmt(rec.charges)}) passa do total informado (${fmt(rec.total)}) em ${fmt(rec.diff)}. Provável: um valor lido errado (confira as linhas "revisar"), ou uma transação repetida ou de outra fatura.` + reviewTxt);
+    else add("", `A soma das compras (${fmt(rec.charges)}) é menor que o total informado (${fmt(rec.total)}): faltam ${fmt(-rec.diff)}. Provável: falta uma captura, um valor lido errado, ou o fechamento da fatura não é o padrão (Avançado).` + reviewTxt);
   } else if (toReview) add("", `${toReview} linha(s) marcada(s) com "revisar": confira o valor e a data delas.`);
 }
 
@@ -232,8 +238,9 @@ $("#add").addEventListener("click", () => {
 $("#save").addEventListener("click", async () => {
   try {
     // linha corrigida e salva = linha conferida: sai a marca "revisar"
-    S.draft.forEach((d) => { const b = rowById(S.rows, d.id); if (b && FIELDS.some((f) => String(b[f]) !== String(d[f]))) d.revisar = false; });
-    const r = await api("/api/normalize", { rows: S.draft, remember: $("#remember").checked });
+    // (só na cópia enviada: se o salvamento falhar, a marca continua na tabela)
+    const payload = S.draft.map((d) => { const b = rowById(S.rows, d.id); return b && FIELDS.some((f) => String(b[f]) !== String(d[f])) ? { ...d, revisar: false } : d; });
+    const r = await api("/api/normalize", { rows: payload, remember: $("#remember").checked });
     if (r.errors.length) {
       renderTable();
       r.errors.forEach((e) => { const inp = $(`#grid input[data-i="${e.index}"][data-f="${/Valor/.test(e.message) ? "valor" : "data"}"]`); if (inp) inp.classList.add("err"); });
@@ -373,12 +380,11 @@ function renderSummary() {
   const total = spend.reduce((s, r) => s + r.valor_centavos, 0), cr = credits.reduce((s, r) => s + r.valor_centavos, 0);
   const big = spend.reduce((b, r) => (!b || r.valor_centavos > b.valor_centavos ? r : b), null);
   // conferência recalculada com as linhas atuais (edições salvas incluídas)
-  const rec0 = S.meta && S.meta.stats.reconciliation;
+  const rec = reconcile(rows);
   let recK = "";
-  if (rec0) {
-    const net = total + cr, ok = rec0.total === total || rec0.total === net, diff = rec0.total - total;
-    const sub = ok ? "Total " + fmt(rec0.total) : (diff > 0 ? "Faltam " : "Sobram ") + fmt(Math.abs(diff)) + " vs. " + fmt(rec0.total);
-    recK = `<div class="kpi"><div class="l">Conferência com o total</div><div class="v">${ok ? "✓ Bate" : "✗ Difere"}</div><div class="s">${sub}</div></div>`;
+  if (rec) {
+    const sub = rec.ok ? "Total " + fmt(rec.total) : (rec.diff < 0 ? "Faltam " : "Sobram ") + fmt(Math.abs(rec.diff)) + " vs. " + fmt(rec.total);
+    recK = `<div class="kpi"><div class="l">Conferência com o total</div><div class="v">${rec.ok ? "✓ Bate" : "✗ Difere"}</div><div class="s">${sub}</div></div>`;
   }
   el.innerHTML = `<div class="kpis">
     <div class="kpi"><div class="l">Total em compras</div><div class="v">${fmt(total)}</div><div class="s">${spend.length} lançamentos</div></div>
