@@ -29,6 +29,12 @@ class Server(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_default_due_month_is_next_month(self):
+        from datetime import date
+        from fatura_ocr.server import default_due
+        self.assertEqual(default_due(date(2026, 11, 10)), (2026, 12))
+        self.assertEqual(default_due(date(2026, 12, 31)), (2027, 1))
+
     def test_index_injects_token_and_defaults(self):
         r = self.c.get("/")
         self.assertEqual(r.status_code, 200)
@@ -63,21 +69,16 @@ class Server(unittest.TestCase):
         r = self.c.post("/api/normalize", json={"rows": [dict(ROW, valor="abc")]}, headers=self.h)
         self.assertEqual(r.json()["errors"][0]["index"], 0)
 
-    def test_csv_and_save(self):
+    def test_csv(self):
         r = self.c.post("/api/csv", json={"rows": [ROW], "ano": 2026, "mes": 10}, headers=self.h)
         self.assertEqual(r.json()["filename"], "fatura-inter-2026-10.csv")
         self.assertIn("STREAMING ABC;PAGAMENTOS", r.json()["text"])
 
-        target = self.home / "out" / "x.csv"
-        body = {"rows": [ROW], "path": str(target), "ano": 2026, "mes": 10}
-        r = self.c.post("/api/save", json=body, headers=self.h)
-        self.assertEqual(r.status_code, 200, r.text)
-        self.assertTrue(target.read_bytes().startswith(b"\xef\xbb\xbfData;"))   # BOM para o Excel
-        self.assertEqual(self.c.post("/api/save", json=body, headers=self.h).status_code, 409)
-        self.assertEqual(self.c.post("/api/save", json=dict(body, overwrite=True), headers=self.h).status_code, 200)
-        # pasta -> nome padrão dentro dela
-        r = self.c.post("/api/save", json=dict(body, path=str(self.home)), headers=self.h)
-        self.assertTrue(r.json()["path"].endswith("fatura-inter-2026-10.csv"))
+    def test_no_server_side_file_writes(self):
+        # o CSV é salvo pelo navegador; o servidor não tem rota para gravar caminhos escolhidos
+        r = self.c.post("/api/save", json={"rows": [ROW], "path": str(self.home / "x.csv")}, headers=self.h)
+        self.assertIn(r.status_code, (404, 405))
+        self.assertFalse((self.home / "x.csv").exists())
 
 
 if __name__ == "__main__":

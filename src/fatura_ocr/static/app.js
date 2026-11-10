@@ -30,7 +30,7 @@ const filename = () => { const m = usedMeta(); return `fatura-inter-${String(m.a
 (function initForm() {
   const sel = $("#mes");
   MONTHS.forEach((m, i) => sel.append(new Option(m, i + 1)));
-  // padrão: a fatura que vence no mês corrente
+  // padrão (definido pelo servidor): a fatura em aberto, que vence no mês seguinte
   sel.value = document.body.dataset.month; $("#ano").value = document.body.dataset.year;
 })();
 
@@ -96,21 +96,14 @@ function showResults(r) {
   const info = document.createElement("div"); info.className = "muted small"; info.style.marginBottom = "10px";
   info.textContent = `${st.rows} transações de ${st.images} captura(s); ${st.duplicates_removed} repetida(s) por sobreposição removida(s).`;
   w.append(info);
-  $("#fname").textContent = filename();
-  $("#path").value = defaultPath();
-  renderTable(); renderBadge(); refreshCsv(); renderSummary(); setTab("tabela");
+  renderTable(); renderBadge(); renderSummary(); setTab("tabela");
   $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
-}
-function defaultPath() {
-  const dir = document.body.dataset.dir; const sep = dir.includes("\\") ? "\\" : "/";
-  return dir + sep + filename();
 }
 
 /* ---------- tabs ---------- */
 function setTab(name) {
   document.querySelectorAll("[role=tab]").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
   document.querySelectorAll(".tabpanel").forEach((p) => (p.hidden = p.id !== "tab-" + name));
-  if (name === "csv") refreshCsv();
 }
 document.querySelectorAll("[role=tab]").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -154,8 +147,7 @@ function renderTable() {
 function updatePending() {
   const n = diffCount(S.rows, S.draft);
   $("#save").disabled = n === 0;
-  $("#pending").textContent = n ? `${n} alteração(ões) não salva(s)` : "";
-  $("#csvstale").hidden = n === 0;
+  $("#pending").textContent = n ? `${n} alteração(ões) não salva(s). Copiar e Salvar CSV usam a última versão salva.` : "";
 }
 $("#add").addEventListener("click", () => {
   const today = new Date(); const dd = String(today.getDate()).padStart(2, "0") + "/" + String(today.getMonth() + 1).padStart(2, "0") + "/" + today.getFullYear();
@@ -172,14 +164,14 @@ $("#save").addEventListener("click", async () => {
     }
     S.rows = clone(r.rows); S.draft = clone(r.rows);
     const n = diffCount(S.original, S.rows); S.edited = n > 0;
-    renderTable(); renderBadge(); refreshCsv(); renderSummary();
+    renderTable(); renderBadge(); renderSummary();
     toast(S.edited ? "Alterações aplicadas. O resultado foi modificado manualmente." : "Alterações aplicadas. O resultado voltou a ser idêntico à leitura automática.");
   } catch (e) { toast(e.message, 7000); }
 });
 $("#reset").addEventListener("click", () => {
   if (!confirm("Descartar todas as edições e voltar ao resultado da leitura automática?")) return;
   S.rows = clone(S.original); S.draft = clone(S.original); S.edited = false;
-  renderTable(); renderBadge(); refreshCsv(); renderSummary(); toast("Voltou ao resultado da leitura automática.");
+  renderTable(); renderBadge(); renderSummary(); toast("Voltou ao resultado da leitura automática.");
   // desfaz também os nomes corrigidos que tinham sido lembrados
   api("/api/normalize", { rows: S.original, remember: $("#remember").checked }).catch((e) => toast(e.message, 6000));
 });
@@ -189,18 +181,8 @@ function renderBadge() {
   if (S.edited) b.textContent = `✎ Editado manualmente · ${n} alteração(ões) desde a leitura automática`;
 }
 
-/* ---------- CSV tab ---------- */
-let csvText = "";
-async function refreshCsv() {
-  if (!S.rows.length && !S.original.length) return;
-  try {
-    const r = await api("/api/csv", { rows: S.rows, delimiter: $("#delim").value, ...usedMeta() });
-    csvText = r.text; $("#csvtext").value = r.text;
-  } catch (e) { toast(e.message, 6000); }
-}
-$("#delim").addEventListener("change", refreshCsv);
-// Copiar para planilha: Google Sheets/Excel só separam em colunas texto com TAB (ou uma tabela HTML),
-// então a cópia usa esses formatos, qualquer que seja o separador escolhido para o arquivo.
+/* ---------- exportar: copiar para planilha / salvar CSV ---------- */
+// Copiar para planilha: Google Sheets/Excel só separam em colunas texto com TAB (ou uma tabela HTML).
 const HEAD = ["Data", "Lançamento", "Categoria", "Tipo", "Valor"], COLS = ["data", "lancamento", "categoria", "tipo", "valor"];
 // tab/quebra de linha viram espaço; campo com aspas é citado (senão a planilha junta células)
 const tsvCell = (v) => { const s = String(v).replace(/[\t\r\n]+/g, " "); return s.includes('"') ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -225,34 +207,36 @@ $("#copy").addEventListener("click", async () => {
         "text/plain": new Blob([text], { type: "text/plain" }),
       })]);
     } else { await navigator.clipboard.writeText(text); }
-  } catch { if (!copyFallback(text)) { toast("Não foi possível copiar. Use Baixar.", 6000); return; } }
+  } catch { if (!copyFallback(text)) { toast("Não foi possível copiar. Use Salvar CSV.", 6000); return; } }
   toast("Tabela copiada. Na planilha, clique em uma célula e cole (Ctrl+V).");
 });
-const blobOf = () => new Blob(["﻿" + csvText], { type: "text/csv;charset=utf-8" });
-$("#download").addEventListener("click", () => {
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blobOf()); a.download = filename();
+
+// Salvar CSV: o arquivo sai com ';' e BOM (abre direto no Excel em português; o Google Sheets também importa).
+async function csvBlob() {
+  const r = await api("/api/csv", { rows: S.rows, delimiter: "semicolon", ...usedMeta() });
+  return new Blob(["\ufeff" + r.text], { type: "text/csv;charset=utf-8" });
+}
+function download(blob) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename();
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast("Baixado como " + filename() + " (pasta de downloads do navegador).");
-});
-if (window.showSaveFilePicker) {
-  $("#saveas").hidden = false;
-  $("#saveas").addEventListener("click", async () => {
-    try {
-      const h = await window.showSaveFilePicker({ suggestedName: filename(), types: [{ description: "CSV", accept: { "text/csv": [".csv"] } }] });
-      const w = await h.createWritable(); await w.write(blobOf()); await w.close(); toast("Salvo em " + h.name + ".");
-    } catch (e) { if (e.name !== "AbortError") toast("Não foi possível salvar: " + e.message, 6000); }
-  });
+  toast("Salvo na pasta Downloads como " + filename() + ".", 6000);
 }
-$("#savepath").addEventListener("click", () => savePath(false));
-async function savePath(overwrite) {
+$("#savecsv").addEventListener("click", async () => {
   try {
-    const r = await api("/api/save", { rows: S.rows, delimiter: $("#delim").value, path: $("#path").value, overwrite, ...usedMeta() });
-    toast("Salvo em " + r.path, 7000);
-  } catch (e) {
-    if (e.status === 409 && confirm(e.message + "\n\nSobrescrever?")) return savePath(true);
-    if (e.status !== 409) toast(e.message, 8000);
-  }
-}
+    if (window.showSaveFilePicker) { // Chrome/Edge: janela "Salvar como" do Windows, com o nome já preenchido
+      let handle = null;
+      try {
+        // abre o seletor já no clique (exigência do navegador); o conteúdo é gerado depois
+        handle = await window.showSaveFilePicker({ suggestedName: filename(), types: [{ description: "Planilha CSV", accept: { "text/csv": [".csv"] } }] });
+      } catch (e) { if (e.name === "AbortError") return; }
+      if (handle) {
+        const blob = await csvBlob(); const w = await handle.createWritable(); await w.write(blob); await w.close();
+        toast("Salvo: " + handle.name + "."); return;
+      }
+    }
+    download(await csvBlob()); // outros navegadores (ou seletor indisponível): download comum
+  } catch (e) { toast("Não foi possível salvar: " + e.message, 7000); }
+});
 ["#mes", "#ano"].forEach((s) => $(s).addEventListener("change", () => {
   if (S.meta) toast("Mês alterado: clique em Ler capturas de novo para recalcular as datas e o nome do arquivo.", 7000);
 }));

@@ -50,7 +50,8 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
    **Deixe cada captura repetir um pouco o fim da anterior** (uma ou duas transações): as linhas
    repetidas são removidas, e a repetição garante que nada fique de fora entre uma captura e outra.
 3. No navegador:
-   1. **Dados da fatura**: escolha o mês da fatura (o mês do **vencimento**, ex.: Setembro/2026).
+   1. **Dados da fatura**: confira o mês da fatura (o mês do **vencimento**). Já vem preenchido com o
+      **próximo mês**, que é o da fatura em aberto; mude se estiver lendo uma fatura já fechada.
       O app mostra só "23 de ago", sem o ano; é esse mês que permite completar a data.
       Se quiser, informe o **total da fatura**: o programa confere se a soma bate.
    2. **Capturas de tela**: arraste as imagens (ou clique para escolher). Confira a ordem (de cima para baixo) e use ↑ ↓ se precisar.
@@ -59,9 +60,11 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
    Para corrigir, edite as células e clique em **Salvar alterações**. Aparece o aviso
    **"Editado manualmente"**, e **Voltar à leitura automática** desfaz tudo.
    Nomes de estabelecimentos corrigidos são lembrados nas próximas faturas (dá para desligar).
-5. Na aba **CSV**: **Copiar para planilha**, **Baixar**, **Salvar como…** (Chrome/Edge) ou **Salvar neste caminho**
-   (ex.: `C:\Users\voce\Documents\Financas\`). **Copiar para planilha** copia como tabela: no Google Sheets ou
-   no Excel, clique em uma célula e cole (Ctrl+V) que cada coluna vai para o lugar certo.
+5. Ainda na **Tabela**:
+   - **Copiar para planilha**: no Google Sheets ou no Excel, clique em uma célula e cole (Ctrl+V); cada coluna vai
+     para o lugar certo.
+   - **Salvar CSV**: no Chrome e no Edge abre a janela "Salvar como" do Windows, já com o nome
+     `fatura-inter-AAAA-MM.csv`, para você escolher a pasta. Em outros navegadores, o arquivo vai para a pasta Downloads.
 6. A aba **Resumo** mostra o total, o gasto por categoria, os maiores estabelecimentos, à vista × parcelado e as compras por mês.
 
 ## Atualizar e desinstalar

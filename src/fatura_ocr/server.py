@@ -1,12 +1,12 @@
 """Servidor local (127.0.0.1). A página e a API são servidas por aqui; nada sai da máquina.
 
-Proteções, porque o servidor pode gravar arquivos: só aceita requisições cujo Host seja local
-(contra DNS rebinding) e exige um token aleatório, entregue só dentro da página, em toda
-chamada /api (impede que outro site aberto no navegador use a API).
+Proteções: só aceita requisições cujo Host seja local (contra DNS rebinding) e exige um token
+aleatório, entregue só dentro da página, em toda chamada /api (impede que outro site aberto no
+navegador use a API, que lê imagens e grava os nomes de estabelecimentos). Quem salva o CSV é o
+navegador (janela "Salvar como" ou download); o servidor não grava arquivos escolhidos pelo usuário.
 """
 from __future__ import annotations
 
-import html
 import os
 import secrets
 from datetime import date
@@ -32,10 +32,10 @@ def app_home() -> Path:
     return Path(os.environ.get("FATURA_OCR_HOME") or Path.home() / ".fatura-ocr")
 
 
-def default_dir() -> Path:
-    """Pasta sugerida para salvar: Documentos, se existir; senão a pasta do usuário."""
-    docs = Path.home() / "Documents"
-    return docs if docs.is_dir() else Path.home()
+def default_due(today: date) -> tuple[int, int]:
+    """Mês de vencimento sugerido: o próximo. O normal é capturar a fatura ainda aberta, que vence no
+    mês seguinte (a do mês corrente costuma já estar fechada ou paga)."""
+    return (today.year + 1, 1) if today.month == 12 else (today.year, today.month + 1)
 
 
 class Rows(BaseModel):
@@ -48,11 +48,6 @@ class Rows(BaseModel):
 class NormalizeBody(BaseModel):
     rows: list[dict]
     remember: bool = True
-
-
-class SaveBody(Rows):
-    path: str
-    overwrite: bool = False
 
 
 def create_app(token: str | None = None, home: Path | None = None, read_lines=None) -> FastAPI:
@@ -74,11 +69,10 @@ def create_app(token: str | None = None, home: Path | None = None, read_lines=No
     @app.get("/", response_class=HTMLResponse)
     def index():
         page = (STATIC / "index.html").read_text(encoding="utf-8")
-        today = date.today()
+        due_year, due_month = default_due(date.today())
         return (page.replace("__TOKEN__", token)
-                    .replace("__DEFAULT_YEAR__", str(today.year))
-                    .replace("__DEFAULT_MONTH__", str(today.month))
-                    .replace("__DEFAULT_DIR__", html.escape(str(default_dir()))))
+                    .replace("__DEFAULT_YEAR__", str(due_year))
+                    .replace("__DEFAULT_MONTH__", str(due_month)))
 
     @app.post("/api/process")
     async def process(ano: int = Form(...), mes: int = Form(...), fechamento: str = Form(""),
@@ -126,31 +120,6 @@ def create_app(token: str | None = None, home: Path | None = None, read_lines=No
         if errors:
             raise HTTPException(422, errors[0]["message"])
         return {"text": csvio.to_csv(rows, body.delimiter), "filename": _fname(body)}
-
-    @app.post("/api/save")
-    def save(body: SaveBody):
-        rows, errors = csvio.normalize_rows(body.rows)
-        if errors:
-            raise HTTPException(422, errors[0]["message"])
-        raw = body.path.strip().strip('"')
-        if not raw:
-            raise HTTPException(422, "Informe o caminho do arquivo.")
-        path = Path(os.path.expandvars(raw)).expanduser()
-        if not path.is_absolute():
-            path = default_dir() / path
-        if path.is_dir() or raw.endswith(("/", "\\")):
-            path = path / _fname(body)
-        if path.suffix.lower() != ".csv":
-            path = path.with_name(path.name + ".csv")
-        if path.exists() and not body.overwrite:
-            raise HTTPException(409, f"O arquivo já existe: {path}")
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            # utf-8 com BOM: o Excel em português abre os acentos corretamente
-            path.write_bytes(csvio.to_csv(rows, body.delimiter, bom=True).encode("utf-8"))
-        except OSError as e:
-            raise HTTPException(422, f"Não foi possível salvar em {path}: {e.strerror or e}") from None
-        return {"path": str(path.resolve()), "bytes": path.stat().st_size}
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     return app
