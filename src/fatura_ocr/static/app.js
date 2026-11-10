@@ -65,6 +65,9 @@ function renderFiles() {
     ol.append(li);
   });
   $("#go").disabled = S.files.length === 0;
+  if (S.meta) $("#sum-files").textContent = S.files.length === S.readCount
+    ? `${S.readCount} captura(s) lida(s) · clique para trocar ou ler de novo`
+    : `${S.files.length} captura(s) · a lista mudou, clique em Ler capturas`;
 }
 
 $("#go").addEventListener("click", async () => {
@@ -105,8 +108,11 @@ function showResults(r) {
 function collapseSteps() {
   const m = usedMeta(), total = $("#total").value.trim();
   $("#sum-form").textContent = `${MONTHS[m.mes - 1]}/${m.ano}` + (total ? ` · total ${total}` : "");
-  $("#sum-files").textContent = `${S.files.length} captura(s) lida(s) · clique para trocar ou ler de novo`;
+  S.readCount = S.files.length;
+  $("#sum-files").textContent = `${S.readCount} captura(s) lida(s) · clique para trocar ou ler de novo`;
   $("#step-form").open = false; $("#step-files").open = false;
+  // o botão "Ler capturas" sumiu ao recolher: leva o foco do teclado para a tabela
+  $('[role=tab][aria-selected="true"]').focus({ preventScroll: true });
 }
 
 /* ---------- tabs ---------- */

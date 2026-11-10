@@ -45,6 +45,17 @@ class Server(unittest.TestCase):
         self.assertIn(f'data-year="{y}" data-month="{m}"', r.text)
         self.assertNotIn("__DEFAULT", r.text)
 
+    def test_js_ids_exist_in_html(self):
+        # app.js referenciando um elemento que a página não tem quebra a tela inteira
+        import re
+        from fatura_ocr.server import STATIC
+        js = (STATIC / "app.js").read_text(encoding="utf-8")
+        html = (STATIC / "index.html").read_text(encoding="utf-8")
+        ids = set(re.findall(r'\$\("#([\w-]+)', js))
+        self.assertGreater(len(ids), 10)
+        for i in ids:
+            self.assertIn(f'id="{i}"', html, i)
+
     def test_assets_are_versioned_and_revalidated(self):
         # depois de uma atualização, o navegador não pode usar app.js/style.css antigos com a página nova
         from fatura_ocr.server import asset_version
