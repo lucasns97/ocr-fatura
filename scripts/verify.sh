@@ -20,6 +20,7 @@ echo "== Unit tests (git guard, parser, pipeline, CSV, server, real OCR on synth
 echo "== Front-end syntax =="
 if command -v node >/dev/null 2>&1; then
   node --check src/fatura_ocr/static/app.js || status=1
+  node tests/js/money.test.js || status=1
 else
   echo "skipped: node not installed"
 fi

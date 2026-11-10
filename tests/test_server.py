@@ -63,6 +63,7 @@ class Server(unittest.TestCase):
         v = asset_version()
         self.assertIn(f'/static/app.js?v={v}"', r.text)
         self.assertIn(f'/static/style.css?v={v}"', r.text)
+        self.assertIn(f'/static/money.js?v={v}"', r.text)
         self.assertEqual(r.headers["cache-control"], "no-cache")
         self.assertEqual(self.c.get(f"/static/app.js?v={v}").headers["cache-control"], "no-cache")
 

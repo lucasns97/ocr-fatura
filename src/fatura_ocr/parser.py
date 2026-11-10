@@ -42,6 +42,10 @@ DATE_RE = re.compile(
 # Sinal opcional: se o OCR perder o '-', o 'R$' ainda ancora o valor (lido como compra).
 AMOUNT_RE = re.compile(r"(?:([-+−–])\s*R[\$S5]?|\bR\$)\s*(\d[\d.,\s]*\d)")
 INSTALL_RE = re.compile(r"Parcela\s*(\d+)\s*de\s*(\d+)", re.I)
+# Cartão-resumo no topo da tela "Faturas" ("Setembro Paga", total, "Dia de vencimento 07/09",
+# "Resumo da fatura", "Exportar fatura", "Despesas da fatura"). Não são transações: tudo até a
+# última dessas linhas é ignorado. Aplicado a plain(texto).
+CARD_RE = re.compile(r"dia de vencimento|resumo da fatura|exportar fatura|despesas da fatura|pagamento minimo")
 CARD_MONTH_RE = re.compile(r"^(" + "|".join(MONTH_NAMES).replace("ç", "c") + r")\b")  # aplicado a plain(texto)
 
 
@@ -116,6 +120,11 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
             res.card_month = [plain(n) for n in MONTH_NAMES].index(m.group(1)) + 1
             break
     body = [ln for ln in lines if TOP_CUT * height < ln.y < BOTTOM_CUT * height]
+    card = [i for i, ln in enumerate(body) if CARD_RE.search(plain(ln.text))]
+    if card:
+        # captura do topo da lista: o cartão-resumo não é transação, e nada aqui herda a data anterior
+        body = body[card[-1] + 1:]
+        start_date = None
     date = start_date
     saw_header = False
     for i, ln in enumerate(body):

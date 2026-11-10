@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import calendar
 import difflib
+import hashlib
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -139,7 +140,13 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
     res = Result()
     screens: list[list[RawRow]] = []
     prev_date = None
+    seen: dict[str, int] = {}
     for i, data in enumerate(images):
+        digest = hashlib.sha256(data).hexdigest()
+        if digest in seen:  # mesma captura enviada duas vezes: duplicaria todas as linhas dela
+            res.warnings.append(f"A imagem {i + 1} é igual à imagem {seen[digest] + 1} e foi ignorada.")
+            continue
+        seen[digest] = i
         try:
             lines, height = read_lines(data)
         except ValueError as e:
@@ -162,21 +169,14 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
         res.warnings.append(
             f"{late} compra(s) com data depois do fechamento ({closing:%d/%m/%Y}). Se o ano estiver errado, "
             f"ajuste o fechamento em Avançado e leia de novo.")
-    for i, k in enumerate(removed):
-        if k:
-            res.stats.setdefault("overlaps", []).append({"between": [i + 1, i + 2], "removed": k})
     res.rows = rows
-    res.stats["images"] = len(images)
+    res.stats["images"] = len(screens)               # capturas lidas
+    res.stats["ignored_images"] = len(images) - len(screens)
     res.stats["rows"] = len(rows)
     res.stats["duplicates_removed"] = sum(removed)
     res.stats["closing"] = closing.isoformat()
     res.stats["reconciliation"] = reconcile(rows, total_cents)
-    rec = res.stats["reconciliation"]
-    if rec and not rec["ok"]:
-        res.warnings.append(
-            f"A soma das compras ({format_money(rec['charges'])}) difere do total informado "
-            f"({format_money(rec['total'])}) em {format_money(abs(rec['diff']))}. Pode faltar uma captura, ou o "
-            f"fechamento da fatura não é o padrão.")
+    # a mensagem da conferência é montada na página, que a recalcula a cada edição salva
     return res
 
 

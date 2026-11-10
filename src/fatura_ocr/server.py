@@ -33,10 +33,13 @@ def app_home() -> Path:
     return Path(os.environ.get("FATURA_OCR_HOME") or Path.home() / ".fatura-ocr")
 
 
+ASSETS = ("app.js", "money.js", "style.css")  # arquivos da página; todos ganham ?v= (cache)
+
+
 def asset_version() -> str:
-    """Muda quando app.js ou style.css mudam: o link novo força o navegador a baixar a versão nova."""
+    """Muda quando algum arquivo da página muda: o link novo força o navegador a baixar a versão nova."""
     h = hashlib.sha256()
-    for name in ("app.js", "style.css"):
+    for name in ASSETS:
         h.update((STATIC / name).read_bytes())
     return h.hexdigest()[:12]
 
@@ -84,7 +87,8 @@ def create_app(token: str | None = None, home: Path | None = None, read_lines=No
         page = (STATIC / "index.html").read_text(encoding="utf-8")
         due_year, due_month = default_due(date.today())
         v = asset_version()
-        page = page.replace("/static/style.css", f"/static/style.css?v={v}").replace("/static/app.js", f"/static/app.js?v={v}")
+        for name in ASSETS:
+            page = page.replace(f"/static/{name}", f"/static/{name}?v={v}")
         return (page.replace("__TOKEN__", token)
                     .replace("__DEFAULT_YEAR__", str(due_year))
                     .replace("__DEFAULT_MONTH__", str(due_month)))

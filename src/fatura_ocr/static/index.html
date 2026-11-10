@@ -23,7 +23,7 @@
         </span>
       </label>
       <label><span>Total da fatura <em>(opcional)</em></span>
-        <input id="total" type="text" inputmode="decimal" placeholder="R$ 1.234,56">
+        <input id="total" type="text" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off">
         <small>Se informar, conferimos se a soma bate e avisamos se faltar algo.</small>
       </label>
     </div>
@@ -52,6 +52,7 @@
 
   <section id="results" hidden>
     <div id="warnings"></div>
+    <div id="recon"></div>
     <div class="bar">
       <div class="tabs" role="tablist">
         <button role="tab" data-tab="tabela" aria-selected="true">Tabela</button>
@@ -91,6 +92,7 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <div id="tip" class="tip" hidden></div>
+<script src="/static/money.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

@@ -46,6 +46,21 @@ class Parser(unittest.TestCase):
         self.assertLessEqual(rows[0].conf, UNSURE_CONF)   # data deduzida: marcada para revisar
         self.assertGreater(rows[1].conf, UNSURE_CONF)
 
+    def test_summary_card_is_never_a_transaction(self):
+        # tela de fatura fechada: cartão "Setembro Paga" com o total sem sinal. Mesmo herdando a data
+        # da captura anterior, nada do cartão pode virar linha.
+        lines = [OcrLine(330, "Setembro Paga", .9), OcrLine(380, "R$ 1.234,56", .9),
+                 OcrLine(480, "Dia de vencimento 07/09", .9), OcrLine(570, "Resumo da fatura", .9),
+                 OcrLine(690, "Exportar fatura", .9), OcrLine(790, "Despesas da fatura", .9)]
+        lines += screen(*tx("Domingo, 23 de ago", "Pagamentos", "-R$ 12,34", "STREAMING ABC"), start=870)
+        for start in (None, (29, 7)):
+            res = parse_screen(lines, H, start_date=start)
+            self.assertEqual([(r.day, r.amount) for r in res.rows], [(23, 1234)], start)
+            self.assertEqual(res.card_month, 9)
+        # cartão cortado (sem "Despesas da fatura" visível): também ignorado
+        cut = [OcrLine(330, "Setembro Paga", .9), OcrLine(380, "R$ 1.234,56", .9), OcrLine(480, "Dia de vencimento 07/09", .9)]
+        self.assertEqual(parse_screen(cut, H, start_date=(29, 7)).rows, [])
+
     def test_missing_sign_is_flagged(self):
         rows = parse_screen(screen(*tx("Quinta, 20 de ago", "Outros", "R$ 500,00", "LOJA C")), H).rows
         self.assertEqual(rows[0].amount, 50000)                # lido como compra...
