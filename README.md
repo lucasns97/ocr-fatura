@@ -59,8 +59,9 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
    Para corrigir, edite as células e clique em **Salvar alterações**. Aparece o aviso
    **"Editado manualmente"**, e **Voltar à leitura automática** desfaz tudo.
    Nomes de estabelecimentos corrigidos são lembrados nas próximas faturas (dá para desligar).
-5. Na aba **CSV**: **Copiar**, **Baixar**, **Salvar como…** (Chrome/Edge) ou **Salvar neste caminho**
-   (ex.: `C:\Users\voce\Documents\Financas\`). Para colar direto numa planilha, escolha o separador **Tab**.
+5. Na aba **CSV**: **Copiar para planilha**, **Baixar**, **Salvar como…** (Chrome/Edge) ou **Salvar neste caminho**
+   (ex.: `C:\Users\voce\Documents\Financas\`). **Copiar para planilha** copia como tabela: no Google Sheets ou
+   no Excel, clique em uma célula e cole (Ctrl+V) que cada coluna vai para o lugar certo.
 6. A aba **Resumo** mostra o total, o gasto por categoria, os maiores estabelecimentos, à vista × parcelado e as compras por mês.
 
 ## Atualizar e desinstalar

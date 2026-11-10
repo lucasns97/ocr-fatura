@@ -199,10 +199,32 @@ async function refreshCsv() {
   } catch (e) { toast(e.message, 6000); }
 }
 $("#delim").addEventListener("change", refreshCsv);
+// Copiar para planilha: Google Sheets/Excel só separam em colunas texto com TAB (ou uma tabela HTML),
+// então a cópia usa esses formatos, qualquer que seja o separador escolhido para o arquivo.
+const HEAD = ["Data", "Lançamento", "Categoria", "Tipo", "Valor"], COLS = ["data", "lancamento", "categoria", "tipo", "valor"];
+const tsvCell = (v) => String(v).replace(/[\t\r\n]+/g, " ");
+function tableText() {
+  return [HEAD, ...S.rows.map((r) => COLS.map((c) => r[c]))].map((row) => row.map(tsvCell).join("\t")).join("\r\n");
+}
+function tableHtml() {
+  const tr = (cells, tag) => "<tr>" + cells.map((c) => `<${tag}>${esc(c)}</${tag}>`).join("") + "</tr>";
+  return `<meta charset="utf-8"><table>${tr(HEAD, "th")}${S.rows.map((r) => tr(COLS.map((c) => r[c]), "td")).join("")}</table>`;
+}
+function copyFallback(text) { // navegadores sem API de área de transferência
+  const t = document.createElement("textarea"); t.value = text; t.style.position = "fixed"; t.style.opacity = "0";
+  document.body.append(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok;
+}
 $("#copy").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText(csvText); }
-  catch { const t = $("#csvtext"); t.select(); document.execCommand("copy"); }
-  toast("CSV copiado para a área de transferência.");
+  const text = tableText();
+  try {
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([tableHtml()], { type: "text/html" }),
+        "text/plain": new Blob([text], { type: "text/plain" }),
+      })]);
+    } else { await navigator.clipboard.writeText(text); }
+  } catch { if (!copyFallback(text)) { toast("Não foi possível copiar. Use Baixar.", 6000); return; } }
+  toast("Tabela copiada. Na planilha, clique em uma célula e cole (Ctrl+V).");
 });
 const blobOf = () => new Blob(["﻿" + csvText], { type: "text/csv;charset=utf-8" });
 $("#download").addEventListener("click", () => {
