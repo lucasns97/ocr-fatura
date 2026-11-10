@@ -2,7 +2,9 @@
 #
 # Jeito facil: clique duas vezes em "instalar.cmd".
 # Sem baixar nada antes: abra o PowerShell e cole
-#   irm https://raw.githubusercontent.com/lucasns97/ocr-fatura/main/instalar.ps1 | iex
+#   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/lucasns97/ocr-fatura/main/instalar.ps1 | iex
+# (a primeira parte liga o TLS 1.2; sem ela o PowerShell 5 do Windows pode falhar com
+#  "A conexao subjacente estava fechada")
 #
 # O que ele faz:
 #   1. instala o uv (gerenciador de Python da Astral), se ainda nao tiver;
@@ -27,7 +29,8 @@ function Install-FaturaOcr {
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
         Write-Host 'Instalando o uv (https://docs.astral.sh/uv/)...'
-        powershell -NoProfile -ExecutionPolicy Bypass -Command 'irm https://astral.sh/uv/install.ps1 | iex'
+        # processo novo: liga o TLS 1.2 nele tambem (nao herda a configuracao deste)
+        powershell -NoProfile -ExecutionPolicy Bypass -Command '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://astral.sh/uv/install.ps1 | iex'
         if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
             throw 'Nao foi possivel instalar o uv. Verifique a internet e rode o instalador de novo.'
         }
