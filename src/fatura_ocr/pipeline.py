@@ -132,8 +132,13 @@ def build_rows(raw: list[RawRow], closing: date, aliases: AliasStore) -> tuple[l
 
 
 def process_images(images: list[bytes], year: int, month: int, closing: date | None,
-                   total_cents: int | None, aliases: AliasStore, read_lines=None) -> Result:
-    """`read_lines` é injetável para testes (substitui o OCR)."""
+                   total_cents: int | None, aliases: AliasStore, read_lines=None, progress=None) -> Result:
+    """`read_lines` é injetável para testes (substitui o OCR).
+
+    `progress(índice, estado)`, se dado, é chamado quando cada captura começa ("start") e termina
+    ("done", ou "skipped" se for igual a uma anterior): a página mostra o andamento real.
+    """
+    progress = progress or (lambda i, state: None)
     if read_lines is None:
         from .ocr import read_lines
     closing = closing or default_closing(year, month)
@@ -145,9 +150,11 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
         digest = hashlib.sha256(data).hexdigest()
         if digest in seen:  # mesma captura enviada duas vezes: duplicaria todas as linhas dela
             res.warnings.append(f"A imagem {i + 1} é igual à imagem {seen[digest] + 1} e foi ignorada.")
+            progress(i, "skipped")
             continue
         seen[digest] = i
         try:
+            progress(i, "start")
             lines, height = read_lines(data)
         except ValueError as e:
             raise ValueError(f"Imagem {i + 1}: {e}") from e
@@ -160,6 +167,7 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
         if not sr.rows:
             res.warnings.append(f"Nenhuma transação encontrada na imagem {i + 1}. É a tela 'Faturas' do app?")
         screens.append(sr.rows)
+        progress(i, "done")
     merged, removed = merge_screens(screens)
     rows, undated, late = build_rows(merged, closing, aliases)
     aliases.save()

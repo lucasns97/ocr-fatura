@@ -64,6 +64,7 @@ class Server(unittest.TestCase):
         self.assertIn(f'/static/app.js?v={v}"', r.text)
         self.assertIn(f'/static/style.css?v={v}"', r.text)
         self.assertIn(f'/static/money.js?v={v}"', r.text)
+        self.assertIn(f'/static/stream.js?v={v}"', r.text)
         self.assertEqual(r.headers["cache-control"], "no-cache")
         self.assertEqual(self.c.get(f"/static/app.js?v={v}").headers["cache-control"], "no-cache")
 
@@ -83,6 +84,46 @@ class Server(unittest.TestCase):
         self.assertTrue(body["stats"]["reconciliation"]["ok"])
         bad = self.c.post("/api/process", data={"ano": "2026", "mes": "13"}, files=files, headers=self.h)
         self.assertEqual(bad.status_code, 422)
+
+    def test_process_stream_reports_each_image_then_result(self):
+        import json
+        files = [("files", ("a.png", b"img-a", "image/png")), ("files", ("b.png", b"img-b", "image/png")),
+                 ("files", ("c.png", b"img-a", "image/png"))]
+        r = self.c.post("/api/process?stream=1", data={"ano": "2026", "mes": "9"}, files=files, headers=self.h)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.headers["content-type"].startswith("application/x-ndjson"))
+        evs = [json.loads(line) for line in r.text.splitlines() if line.strip()]
+        self.assertEqual([(e["index"], e["state"]) for e in evs if e["event"] == "image"],
+                         [(0, "start"), (0, "done"), (1, "start"), (1, "done"), (2, "skipped")])
+        self.assertEqual(evs[-1]["event"], "result")
+        self.assertEqual(evs[-1]["filename"], "fatura-inter-2026-09.csv")
+        self.assertEqual(evs[-1]["stats"]["ignored_images"], 1)
+
+    def test_process_stream_reports_errors(self):
+        import json
+
+        def broken(_):
+            raise ValueError("arquivo não é uma imagem legível")
+        app = create_app(token="t0k", home=self.home, read_lines=broken)
+        c = TestClient(app, base_url="http://127.0.0.1:8765")
+        r = c.post("/api/process?stream=1", data={"ano": "2026", "mes": "9"},
+                   files=[("files", ("a.png", b"x", "image/png"))], headers=self.h)
+        self.assertEqual(r.status_code, 200)
+        last = json.loads(r.text.strip().splitlines()[-1])
+        self.assertEqual(last["event"], "error")
+        self.assertIn("Imagem 1", last["detail"])
+
+    def test_process_stream_reports_unexpected_errors(self):
+        import json
+
+        def crash(_):
+            raise RuntimeError("boom")
+        c = TestClient(create_app(token="t0k", home=self.home, read_lines=crash), base_url="http://127.0.0.1:8765")
+        r = c.post("/api/process?stream=1", data={"ano": "2026", "mes": "9"},
+                   files=[("files", ("a.png", b"x", "image/png"))], headers=self.h)
+        self.assertEqual(r.status_code, 200)
+        last = json.loads(r.text.strip().splitlines()[-1])
+        self.assertEqual(last, {"event": "error", "detail": "Erro inesperado ao ler as capturas."})
 
     def test_normalize_remembers_rename_and_its_undo(self):
         aliases = self.home / "merchant_aliases.json"
