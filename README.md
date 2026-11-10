@@ -56,7 +56,7 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
       Se quiser, informe o **total da fatura**: o programa confere se a soma bate.
    2. **Capturas de tela**: arraste as imagens (ou clique para escolher). Confira a ordem (de cima para baixo) e use ↑ ↓ se precisar.
    3. Clique em **Ler capturas** (cerca de 1 segundo por imagem).
-4. Confira a **Tabela**. Linhas marcadas com **revisar** tiveram leitura incerta.
+4. Depois da leitura, as seções 1 e 2 se recolhem (clique no título para abrir de novo). Confira a **Tabela**. Linhas marcadas com **revisar** tiveram leitura incerta.
    Para corrigir, edite as células e clique em **Salvar alterações**. Aparece o aviso
    **"Editado manualmente"**, e **Voltar à leitura automática** desfaz tudo.
    Nomes de estabelecimentos corrigidos são lembrados nas próximas faturas (dá para desligar).

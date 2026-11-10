@@ -7,6 +7,7 @@ navegador (janela "Salvar como" ou download); o servidor não grava arquivos esc
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
 from datetime import date
@@ -30,6 +31,14 @@ MAX_BYTES = 20 * 1024 * 1024
 def app_home() -> Path:
     """Pasta onde ficam os apelidos de estabelecimentos (FATURA_OCR_HOME para trocar)."""
     return Path(os.environ.get("FATURA_OCR_HOME") or Path.home() / ".fatura-ocr")
+
+
+def asset_version() -> str:
+    """Muda quando app.js ou style.css mudam: o link novo força o navegador a baixar a versão nova."""
+    h = hashlib.sha256()
+    for name in ("app.js", "style.css"):
+        h.update((STATIC / name).read_bytes())
+    return h.hexdigest()[:12]
 
 
 def default_due(today: date) -> tuple[int, int]:
@@ -64,12 +73,18 @@ def create_app(token: str | None = None, home: Path | None = None, read_lines=No
             return JSONResponse({"detail": "Host não permitido"}, status_code=403)
         if request.url.path.startswith("/api/") and request.headers.get("x-token") != token:
             return JSONResponse({"detail": "Token inválido. Recarregue a página."}, status_code=403)
-        return await call_next(request)
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/static/"):
+            # sempre revalida: depois de atualizar o programa o navegador não pode misturar versões
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
     @app.get("/", response_class=HTMLResponse)
     def index():
         page = (STATIC / "index.html").read_text(encoding="utf-8")
         due_year, due_month = default_due(date.today())
+        v = asset_version()
+        page = page.replace("/static/style.css", f"/static/style.css?v={v}").replace("/static/app.js", f"/static/app.js?v={v}")
         return (page.replace("__TOKEN__", token)
                     .replace("__DEFAULT_YEAR__", str(due_year))
                     .replace("__DEFAULT_MONTH__", str(due_month)))

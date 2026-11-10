@@ -97,7 +97,16 @@ function showResults(r) {
   info.textContent = `${st.rows} transações de ${st.images} captura(s); ${st.duplicates_removed} repetida(s) por sobreposição removida(s).`;
   w.append(info);
   renderTable(); renderBadge(); renderSummary(); setTab("tabela");
+  collapseSteps();
   $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* passos 1 e 2 recolhidos depois da leitura, com um resumo do que foi usado */
+function collapseSteps() {
+  const m = usedMeta(), total = $("#total").value.trim();
+  $("#sum-form").textContent = `${MONTHS[m.mes - 1]}/${m.ano}` + (total ? ` · total ${total}` : "");
+  $("#sum-files").textContent = `${S.files.length} captura(s) lida(s) · clique para trocar ou ler de novo`;
+  $("#step-form").open = false; $("#step-files").open = false;
 }
 
 /* ---------- tabs ---------- */
