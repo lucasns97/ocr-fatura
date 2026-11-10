@@ -13,7 +13,7 @@ uv run fatura --no-browser        # app at http://127.0.0.1:8765 (FATURA_OCR_HOM
 uv run python -m unittest discover -s tests -p 'test_*.py'   # tests only
 ```
 Layout: `src/fatura_ocr/` (`parser.py` reads one screenshot's OCR lines, `pipeline.py` merges screenshots, removes
-overlap, infers years and canonical merchant names, `csvio.py`, `server.py` FastAPI + token/Host guard (no endpoint writes user-chosen paths; the browser saves the CSV; `/api/process?stream=1` streams NDJSON events, one per screenshot start/done/skipped, then the result, and the page's progress bars follow them), `cli.py` the
+overlap, infers years and canonical merchant names, `csvio.py`, `server.py` FastAPI + token/Host guard (no endpoint writes user-chosen paths; the browser saves the CSV; `/api/process?stream=1` streams NDJSON events, one per screenshot start/part/done/skipped (a tall "scrolled" screenshot is read in overlapping pieces and sends a "part" per piece with frac/parts), then the result, and the page's progress bars follow them), `cli.py` the
 `fatura` command, `static/` the UI with no external libraries). Windows entry points: `instalar.cmd`/`.ps1`,
 `iniciar.cmd`/`.ps1`, `desinstalar.cmd`/`.ps1`. CI runs `verify.sh` on Ubuntu and, on `windows-latest`, the real
 installer, launcher and uninstaller.

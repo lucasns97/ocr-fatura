@@ -64,11 +64,7 @@ def tile_tops(h: int, w: int) -> list[int]:
     return list(range(0, h - tile, step)) + [h - tile]
 
 
-def image_width(image_bytes: bytes) -> int:
-    return _decode(image_bytes).shape[1]
-
-
-def read_screens(image_bytes: bytes, on_part=None) -> list[tuple[list[OcrLine], int, bool, bool, int]]:
+def read_screens(image_bytes: bytes, on_part=None, on_width=None) -> list[tuple[list[OcrLine], int, bool, bool, int]]:
     """Lê uma imagem. Retorna uma "tela" por pedaço:
     (linhas, altura, tem barra no topo, tem barra embaixo, topo do pedaço na imagem inteira).
 
@@ -77,6 +73,8 @@ def read_screens(image_bytes: bytes, on_part=None) -> list[tuple[list[OcrLine], 
     """
     img = _decode(image_bytes)
     h, w = img.shape[:2]
+    if on_width:
+        on_width(w)  # para o aviso de resolução baixa, sem decodificar de novo
     tops = tile_tops(h, w)
     if len(tops) == 1:
         return [(_ocr(img), h, True, True, 0)]
@@ -96,6 +94,9 @@ def read_screens(image_bytes: bytes, on_part=None) -> list[tuple[list[OcrLine], 
 
 
 def read_lines(image_bytes: bytes) -> tuple[list[OcrLine], int]:
-    """Uma captura normal (compatibilidade): (linhas, altura)."""
-    lines, h, _, _, _ = read_screens(image_bytes)[0]
+    """Uma captura normal: (linhas, altura). Captura rolada: use read_screens (vários pedaços)."""
+    parts = read_screens(image_bytes)
+    if len(parts) > 1:
+        raise ValueError("captura rolada: use read_screens")
+    lines, h, _, _, _ = parts[0]
     return lines, h

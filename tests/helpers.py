@@ -31,7 +31,7 @@ def font_path() -> str | None:
 
 
 def render_screenshot(blocks: list[tuple[str, list[tuple[str, str, str, str]]]], width: int = 738,
-                      height: int = H) -> bytes:
+                      height: int = H, top: int = 220) -> bytes:
     """Desenha uma captura no estilo do app (tema escuro). blocks = [(cabeçalho de data, [(categoria,
     valor, estabelecimento, parcela)])]. Retorna PNG em bytes."""
     import io
@@ -44,7 +44,7 @@ def render_screenshot(blocks: list[tuple[str, list[tuple[str, str, str, str]]]],
     d = ImageDraw.Draw(im)
     d.text((40, 30), "16:18", font=small, fill=(240, 240, 240))
     d.text((300, 110), "Faturas", font=big, fill=(240, 240, 240))
-    y = 220
+    y = top
     for header, rows in blocks:
         d.text((47, y), header, font=small, fill=(220, 220, 220))
         y += 80

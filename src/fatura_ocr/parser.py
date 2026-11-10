@@ -111,7 +111,7 @@ def group_lines(boxes: list[tuple[float, float, str, float]], height: float) -> 
 
 def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
                  start_date: tuple[int, int] | None = None, cut_top: bool = True,
-                 cut_bottom: bool = True) -> ScreenResult:
+                 cut_bottom: bool = True, start_known: bool = False) -> ScreenResult:
     """`start_date`: última data da captura anterior. Linhas no topo desta captura, antes do primeiro
     cabeçalho de data, pertencem a ela (o cabeçalho rolou para fora da tela). A remoção de
     sobreposição descarta as que já estavam na captura anterior."""
@@ -152,7 +152,7 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
         # categoria = linha logo acima do valor; se ali estiver a data ou outro valor, ela foi cortada
         category = "" if DATE_RE.match(above) or AMOUNT_RE.search(above) else restore_category(above)
         conf = min(ln.conf, body[i - 1].conf)
-        if a.group(1) is None or not saw_header:
+        if a.group(1) is None or not (saw_header or start_known):
             conf = min(conf, UNSURE_CONF)  # sinal não lido (pode ser pagamento) ou data herdada da captura anterior
         merchant, installment = [], ""
         for nxt_i in range(i + 1, len(body)):

@@ -135,19 +135,18 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
                    total_cents: int | None, aliases: AliasStore, read_lines=None, progress=None) -> Result:
     """`read_lines` é injetável para testes (substitui o OCR).
 
-    `progress(índice, estado)`, se dado, é chamado quando cada captura começa ("start") e termina
-    ("done", ou "skipped" se for igual a uma anterior): a página mostra o andamento real.
+    `progress(índice, estado, **kw)`, se dado, é chamado quando cada captura começa ("start") e termina
+    ("done", ou "skipped" se for igual a uma anterior): a página mostra o andamento real. Captura
+    rolada: também "part" a cada pedaço, com frac= (0..1) e parts= (nº de pedaços); o callback deve
+    aceitar **kw.
     """
     progress = progress or (lambda i, state, **kw: None)
     small: list[int] = []
     if read_lines is None:
-        from .ocr import MIN_WIDTH, image_width, read_screens
+        from .ocr import EDGE, MIN_WIDTH, read_screens
 
         def read(data, on_part):
-            parts = read_screens(data, on_part)
-            if image_width(data) < MIN_WIDTH:
-                small.append(i)
-            return parts
+            return read_screens(data, on_part, on_width=lambda w: small.append(i) if w < MIN_WIDTH else None)
     else:  # testes: read_lines(data) -> (linhas, altura) de uma captura normal
         def read(data, on_part):
             lines, height = read_lines(data)
@@ -176,13 +175,17 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
         found = 0
         headers: list[tuple[float, tuple[int, int]]] = []  # cabeçalhos de data já vistos, em y da imagem inteira
         for lines, height, cut_top, cut_bottom, y0 in parts:
+            known = False
             if y0:  # pedaço do meio de uma captura rolada: vale a data do último cabeçalho ACIMA dele
-                # (o pedaço anterior foi além, por causa da sobreposição; a "última data" dele seria de baixo)
-                above = [d for y, d in headers if y < y0]
-                start = above[-1] if above else prev_date
+                # (o pedaço anterior foi além, por causa da sobreposição; a "última data" dele seria de baixo).
+                # Um cabeçalho encostado no topo deste pedaço é descartado por ele (texto cortado), mas
+                # vale para as linhas logo abaixo: por isso a margem.
+                above = [d for y, d in headers if y < y0 + 2 * EDGE * height]
+                start, known = (above[-1], True) if above else (prev_date, False)
             else:
                 start = prev_date
-            sr = parse_screen(lines, height, i, start, cut_top, cut_bottom)
+            # data vinda de um cabeçalho da mesma imagem é certa: não marca "revisar"
+            sr = parse_screen(lines, height, i, start, cut_top, cut_bottom, start_known=known)
             if y0 is not None:
                 headers = sorted(set(headers) | {(y0 + y, d) for y, d in sr.headers})
             prev_date = (headers[-1][1] if headers else None) or sr.last_date or prev_date

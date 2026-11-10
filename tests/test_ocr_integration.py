@@ -42,6 +42,36 @@ class RealOcr(unittest.TestCase):
         self.assertEqual(res.rows[3]["categoria"], "VIAGEM")
 
 
+    def test_tall_screenshot_header_on_a_piece_seam(self):
+        """Cabeçalho de data logo abaixo do topo de um pedaço (descartado por ele como texto cortado):
+        as linhas abaixo ainda recebem a data certa, sem duplicar nem marcar "revisar"."""
+        from fatura_ocr.aliases import AliasStore
+        from fatura_ocr.ocr import tile_tops
+        from fatura_ocr.pipeline import process_images
+
+        def blocks():
+            out, total = [], 0
+            for k in range(6):
+                rows = []
+                for j in range(3 if k == 1 else 1):  # dia com várias compras atravessando o pedaço
+                    cents = 1111 * (k + 1) + 37 * j
+                    total += cents
+                    rows.append(("Compras", f"-R$ {cents // 100},{cents % 100:02d}", f"LOJA FICTICIA {k}{j}", ""))
+                out.append((f"{['Sexta', 'Quinta', 'Quarta', 'Terça', 'Segunda', 'Domingo'][k]}, {28 - k} de ago", rows))
+            return out, total
+
+        h, w = 3000, 738
+        seam = tile_tops(h, w)[1]
+        b, total = blocks()
+        # 1º bloco: cabeçalho (80) + linha (108+60) = 248 px; o 2º cabeçalho fica 4 px abaixo do topo do pedaço 2
+        png = render_screenshot(b, height=h, top=seam + 4 - 248)
+        with tempfile.TemporaryDirectory() as tmp:
+            res = process_images([png], 2026, 9, None, total, AliasStore(Path(tmp) / "a.json"))
+        self.assertEqual(len(res.rows), 8, [(r["data"], r["valor"]) for r in res.rows])
+        self.assertTrue(res.stats["reconciliation"]["ok"], res.stats)
+        self.assertEqual(sum(r["data"] == "27/08/2026" for r in res.rows), 3)
+        self.assertFalse([r for r in res.rows if r["revisar"]])
+
     def test_low_resolution_image_is_flagged(self):
         from fatura_ocr.aliases import AliasStore
         from fatura_ocr.pipeline import process_images
