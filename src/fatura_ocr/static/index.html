@@ -6,7 +6,7 @@
 <title>Fatura OCR</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
-<body data-token="__TOKEN__" data-year="__DEFAULT_YEAR__" data-month="__DEFAULT_MONTH__" data-dir="__DEFAULT_DIR__">
+<body data-token="__TOKEN__" data-year="__DEFAULT_YEAR__" data-month="__DEFAULT_MONTH__">
 <header class="top">
   <div class="brand"><span class="logo" aria-hidden="true">R$</span><h1>Fatura OCR</h1></div>
   <span class="pill" title="O programa roda só neste computador">Roda localmente · nada sai do seu computador</span>
@@ -55,7 +55,6 @@
     <div class="bar">
       <div class="tabs" role="tablist">
         <button role="tab" data-tab="tabela" aria-selected="true">Tabela</button>
-        <button role="tab" data-tab="csv" aria-selected="false">CSV</button>
         <button role="tab" data-tab="resumo" aria-selected="false">Resumo</button>
       </div>
       <span id="edited" class="badge" hidden></span>
@@ -66,8 +65,15 @@
         <button id="add">+ Linha</button>
         <button id="save" class="primary" disabled>Salvar alterações</button>
         <button id="reset" class="ghost" hidden>Voltar à leitura automática</button>
+        <span class="spacer"></span>
+        <button id="copy" class="icon" title="Copia como tabela: cola em colunas no Google Sheets e no Excel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copiar para planilha</button>
+        <button id="savecsv" class="icon" title="Salva o arquivo fatura-inter-AAAA-MM.csv">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Salvar CSV</button>
+      </div>
+      <div class="toolbar sub">
         <label class="inline"><input id="remember" type="checkbox" checked> Lembrar nomes corrigidos nas próximas faturas</label>
-        <span id="pending" class="muted"></span>
+        <span id="pending" class="pending" role="status"></span>
       </div>
       <div class="scroll">
         <table id="grid">
@@ -77,30 +83,6 @@
         </table>
       </div>
       <p class="muted small">Linhas marcadas com <span class="chip warn">revisar</span> tiveram leitura incerta. Pagamentos e estornos têm sinal oposto ao das compras.</p>
-    </div>
-
-    <div id="tab-csv" class="card tabpanel" hidden>
-      <div class="toolbar">
-        <label class="inline">Separador
-          <select id="delim">
-            <option value="semicolon">Ponto e vírgula ( ; ) — Excel em português</option>
-            <option value="comma">Vírgula ( , )</option>
-            <option value="tab">Tab — colar direto na planilha</option>
-          </select>
-        </label>
-        <button id="copy">Copiar</button>
-        <button id="download">Baixar</button>
-        <button id="saveas" hidden>Salvar como…</button>
-      </div>
-      <p id="csvstale" class="muted small" hidden>Há alterações não salvas na tabela; o CSV abaixo mostra a última versão salva.</p>
-      <textarea id="csvtext" readonly spellcheck="false" aria-label="Conteúdo do CSV"></textarea>
-      <div class="savepath">
-        <label>Salvar em uma pasta do computador
-          <input id="path" type="text" spellcheck="false">
-        </label>
-        <button id="savepath">Salvar neste caminho</button>
-      </div>
-      <p class="muted small">O nome padrão é <code id="fname"></code>. Se o caminho for uma pasta, o arquivo é criado dentro dela.</p>
     </div>
 
     <div id="tab-resumo" class="tabpanel" hidden></div>

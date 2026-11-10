@@ -13,7 +13,7 @@ uv run fatura --no-browser        # app at http://127.0.0.1:8765 (FATURA_OCR_HOM
 uv run python -m unittest discover -s tests -p 'test_*.py'   # tests only
 ```
 Layout: `src/fatura_ocr/` (`parser.py` reads one screenshot's OCR lines, `pipeline.py` merges screenshots, removes
-overlap, infers years and canonical merchant names, `csvio.py`, `server.py` FastAPI + token/Host guard, `cli.py` the
+overlap, infers years and canonical merchant names, `csvio.py`, `server.py` FastAPI + token/Host guard (no endpoint writes user-chosen paths; the browser saves the CSV), `cli.py` the
 `fatura` command, `static/` the UI with no external libraries). Windows entry points: `instalar.cmd`/`.ps1`,
 `iniciar.cmd`/`.ps1`, `desinstalar.cmd`/`.ps1`. CI runs `verify.sh` on Ubuntu and, on `windows-latest`, the real
 installer, launcher and uninstaller.
@@ -46,7 +46,7 @@ Agent notes:
 - **Python 3.12 via `uv`** (`.python-version`; `requires-python` allows 3.10-3.13). Dependencies live in `pyproject.toml` with `uv.lock` committed; keep the install small (the user installs on Windows) and prefer wheels over anything that compiles. rapidocr already pulls `opencv-python`: never add `opencv-python-headless` too (both install `cv2` and conflict).
 - **Windows scripts (`*.ps1`, `*.cmd`) are ASCII-only with CRLF** (`.gitattributes` stores them as-is; `verify.sh` checks). Windows PowerShell 5 garbles accents in BOM-less files, and `cmd.exe` reads a batch file while running it, so the installer's `.cmd` does its work on its last line. `.ps1` files don't run on double-click; every user-facing one has a `.cmd` wrapper. Never `exit` in `instalar.ps1`: it also runs via `irm | iex`, where `exit` would close the user's PowerShell window. Windows PowerShell 5.1 may default to TLS 1.0/1.1, which GitHub and astral.sh refuse ("A conexão subjacente estava fechada"): every download command, including the README one-liner and any child `powershell` process, must set `[Net.ServicePointManager]::SecurityProtocol` to Tls12 itself. CI runners already default to TLS 1.2, so CI can't catch this.
 - **Test data is synthetic** (`tests/helpers.py` renders fake screenshots with Pillow). Check real screenshots only from the scratchpad.
-- **Local only.** The server binds to 127.0.0.1 and makes no network calls at run time. The UI loads no CDN assets, so it works offline. Every `/api` call needs the per-run token embedded in the page, and the Host header must be local (DNS rebinding): the server can write files, so keep both checks.
+- **Local only.** The server binds to 127.0.0.1 and makes no network calls at run time. The UI loads no CDN assets, so it works offline. Every `/api` call needs the per-run token embedded in the page, and the Host header must be local (DNS rebinding): the API reads images and writes the alias file, so keep both checks. The CSV is saved by the browser (File System Access picker in Chrome/Edge, else a download); don't add a server endpoint that writes to a user-typed path.
 - **Money is exact.** Amounts are integer centavos internally; format as pt-BR (`1.234,56`) only at the edges.
 - **Report OCR honestly.** The OCR can misread text; the UI shows per-row confidence and flags rows to review rather than implying accuracy.
 
