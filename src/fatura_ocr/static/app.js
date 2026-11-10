@@ -347,15 +347,25 @@ function renderBadge() {
 
 /* ---------- exportar: copiar para planilha / salvar CSV ---------- */
 // Copiar para planilha: Google Sheets/Excel só separam em colunas texto com TAB (ou uma tabela HTML).
-const HEAD = ["Data", "Lançamento", "Categoria", "Tipo", "Valor"], COLS = ["data", "lancamento", "categoria", "tipo", "valor"];
+const HEAD = ["Data", "Lançamento", "Categoria", "Tipo", "Valor"];
 // tab/quebra de linha viram espaço; campo com aspas é citado (senão a planilha junta células)
 const tsvCell = (v) => { const s = String(v).replace(/[\t\r\n]+/g, " "); return s.includes('"') ? '"' + s.replace(/"/g, '""') + '"' : s; };
+// Valor vai como NÚMERO, não como texto "R$ 31,90": assim a planilha soma, e o usuário escolhe o formato.
+// Texto: vírgula decimal e sem separador de milhar ("1896,14", "-8530,63"), que uma planilha em português
+// lê como número. Tabela HTML: também data-sheets-value (formato que o próprio Google Sheets usa ao copiar);
+// não testado colando no Sheets: provavelmente só vale entre planilhas do Sheets, então numa planilha em
+// outro idioma o valor pode continuar como texto (o README explica como mudar a localidade).
+const { numBR } = window.FaturaMoney; // static/money.js (testado em tests/js/money.test.js)
+const cellsOf = (r) => [r.data, r.lancamento, r.categoria, r.tipo, numBR(r.valor_centavos)];
 function tableText() {
-  return [HEAD, ...S.rows.map((r) => COLS.map((c) => r[c]))].map((row) => row.map(tsvCell).join("\t")).join("\r\n");
+  return [HEAD, ...S.rows.map(cellsOf)].map((row) => row.map(tsvCell).join("\t")).join("\r\n");
 }
 function tableHtml() {
-  const tr = (cells, tag) => "<tr>" + cells.map((c) => `<${tag}>${esc(c)}</${tag}>`).join("") + "</tr>";
-  return `<meta charset="utf-8"><table>${tr(HEAD, "th")}${S.rows.map((r) => tr(COLS.map((c) => r[c]), "td")).join("")}</table>`;
+  const td = (c) => `<td>${esc(c)}</td>`;
+  const num = (cents) => `<td data-sheets-value="${esc(JSON.stringify({ 1: 3, 3: cents / 100 }))}">${esc(numBR(cents))}</td>`;
+  const head = "<tr>" + HEAD.map((h) => `<th>${esc(h)}</th>`).join("") + "</tr>";
+  const body = S.rows.map((r) => "<tr>" + cellsOf(r).slice(0, 4).map(td).join("") + num(r.valor_centavos) + "</tr>").join("");
+  return `<meta charset="utf-8"><table>${head}${body}</table>`;
 }
 function copyFallback(text) { // navegadores sem API de área de transferência
   const t = document.createElement("textarea"); t.value = text; t.style.position = "fixed"; t.style.opacity = "0";
