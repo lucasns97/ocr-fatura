@@ -34,6 +34,39 @@ const filename = () => { const m = usedMeta(); return `fatura-inter-${String(m.a
   sel.value = document.body.dataset.month; $("#ano").value = document.body.dataset.year;
 })();
 
+/* Total da fatura: máscara de moeda. Digitando, cada dígito entra pela direita (R$ 0,01 -> R$ 0,18 ->
+   ... -> R$ 1.896,14); apagar tira o último. Colando, o texto é lido como valor ("1.896,14", "1896,14",
+   "R$ 1.896,14" e "1896" viram R$ 1.896,14 / R$ 1.896,00). */
+const totalEl = $("#total");
+const MAX_CENTS = 99999999999; // R$ 999.999.999,99
+function setTotal(cents) {
+  totalEl.value = cents > 0 ? fmt(Math.min(cents, MAX_CENTS)) : "";
+  totalEl.setSelectionRange(totalEl.value.length, totalEl.value.length); // cursor sempre no fim
+}
+function parsePasted(text) { // vírgula ou ponto seguido de 1-2 dígitos no fim = centavos; senão, reais inteiros
+  const core = String(text).replace(/[^\d.,]/g, "");
+  if (!/\d/.test(core)) return null;
+  const m = core.match(/[.,](\d{1,2})$/);
+  const whole = (m ? core.slice(0, m.index) : core).replace(/\D/g, "") || "0";
+  return Number(whole) * 100 + (m ? Number(m[1].padEnd(2, "0")) : 0);
+}
+totalEl.addEventListener("paste", (e) => {
+  e.preventDefault();
+  const c = parsePasted((e.clipboardData || window.clipboardData).getData("text"));
+  if (c !== null) setTotal(c);
+});
+// só dígitos podem ser digitados: vírgula, ponto e "R$" são colocados automaticamente
+totalEl.addEventListener("beforeinput", (e) => {
+  if ((e.inputType === "insertText" || e.inputType === "insertCompositionText") && e.data && /\D/.test(e.data)) e.preventDefault();
+});
+totalEl.addEventListener("input", (e) => {
+  if (e.inputType === "insertFromDrop") { const c = parsePasted(totalEl.value); setTotal(c || 0); return; }
+  const digits = totalEl.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 11);
+  setTotal(digits ? Number(digits) : 0);
+});
+// cursor no meio quebraria a entrada pela direita: mantém no fim
+["focus", "click"].forEach((ev) => totalEl.addEventListener(ev, () => setTimeout(() => totalEl.setSelectionRange(totalEl.value.length, totalEl.value.length), 0)));
+
 /* ---------- step 2: files ---------- */
 const drop = $("#drop"), input = $("#file");
 drop.addEventListener("click", () => input.click());
