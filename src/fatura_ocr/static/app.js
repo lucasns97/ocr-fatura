@@ -79,7 +79,10 @@ function addFiles(list) {
   const imgs = [...list].filter((f) => f.type.startsWith("image/"));
   if (imgs.length < list.length) toast("Arquivos que não são imagem foram ignorados.");
   // ordem natural pelo nome (capturas do celular têm data/hora no nome)
-  imgs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  // ordem natural pelo nome SEM a extensão: o WhatsApp numera repetidas como "X.jpeg", "X 2.jpeg",
+  // "X 3.jpeg"; comparando com a extensão, "X 2" vinha antes de "X" (a primeira captura)
+  const stem = (n) => n.replace(/\.[^.]+$/, "");
+  imgs.sort((a, b) => stem(a.name).localeCompare(stem(b.name), undefined, { numeric: true }) || a.name.localeCompare(b.name));
   const same = (a, b) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
   let dup = 0;
   imgs.forEach((f) => { if (S.files.some((x) => same(x.file, f))) dup += 1; else S.files.push({ file: f, url: URL.createObjectURL(f) }); });
@@ -113,15 +116,53 @@ $("#go").addEventListener("click", async () => {
   const m = meta(); fd.append("ano", m.ano); fd.append("mes", m.mes);
   fd.append("fechamento", $("#fechamento").value); fd.append("total", $("#total").value);
   S.files.forEach((f) => fd.append("files", f.file, f.file.name));
+  const progress = startProgress();
   try {
     const r = await api("/api/process", fd, true);
+    progress.finish(true);
     S.meta = { ...m, stats: r.stats };
     S.original = clone(r.rows); S.rows = clone(r.rows); S.draft = clone(r.rows); S.edited = false;
     showResults(r);
     status.textContent = "";
-  } catch (e) { status.textContent = ""; toast(e.message, 8000); }
+  } catch (e) { progress.finish(false); status.textContent = ""; toast(e.message, 8000); }
   btn.disabled = S.files.length === 0;
 });
+
+/* Progresso da leitura: o servidor lê as capturas em sequência e só responde no fim, então o
+   andamento de cada cartão é ESTIMADO pelo tempo médio por imagem (aprendido nas leituras anteriores).
+   Cartão em leitura: fundo enchendo; lido: fundo cheio + contorno + ✓. O último espera em 97% até a resposta. */
+const MS_KEY = "fatura-ocr:ms-por-imagem";
+function msPerImage() {
+  try { const v = Number(localStorage.getItem(MS_KEY)); return v > 200 && v < 20000 ? v : 1500; } catch { return 1500; }
+}
+function startProgress() {
+  const ol = $("#files"), lis = [...ol.children], n = lis.length, per = msPerImage(), t0 = performance.now();
+  const status = $("#status");
+  ol.classList.add("busy"); drop.classList.add("busy");
+  lis.forEach((li) => { li.classList.remove("done"); li.style.setProperty("--p", "0%"); });
+  let shown = -1, timer = null;
+  const tick = () => {
+    const el = performance.now() - t0;
+    lis.forEach((li, i) => {
+      const p = Math.max(0, Math.min(i === n - 1 ? 0.97 : 1, (el - i * per) / per));
+      li.style.setProperty("--p", (p * 100).toFixed(1) + "%");
+      li.classList.toggle("done", p >= 1);
+    });
+    const cur = Math.min(n - 1, Math.floor(el / per));
+    if (cur !== shown) { shown = cur; status.textContent = `Lendo captura ${cur + 1} de ${n}…`; }
+  };
+  tick(); timer = setInterval(tick, 100);
+  return {
+    finish(ok) {
+      clearInterval(timer); ol.classList.remove("busy"); drop.classList.remove("busy");
+      if (ok) {
+        lis.forEach((li) => { li.style.setProperty("--p", "100%"); li.classList.add("done"); });
+        const real = (performance.now() - t0) / n; // média suavizada para a próxima estimativa
+        try { localStorage.setItem(MS_KEY, String(Math.round(0.5 * per + 0.5 * real))); } catch { /* sem armazenamento: usa o padrão */ }
+      } else lis.forEach((li) => { li.classList.remove("done"); li.style.setProperty("--p", "0%"); });
+    },
+  };
+}
 
 /* ---------- results ---------- */
 function showResults(r) {
