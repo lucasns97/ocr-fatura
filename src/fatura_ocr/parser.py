@@ -87,6 +87,7 @@ class ScreenResult:
     rows: list[RawRow] = field(default_factory=list)
     card_month: int | None = None   # mês do cartão "Setembro" no topo da 1ª captura, se visível
     last_date: tuple[int, int] | None = None  # última data vista; vale para o topo da próxima captura
+    headers: list[tuple[float, tuple[int, int]]] = field(default_factory=list)  # (y, data) de cada cabeçalho
 
 
 def group_lines(boxes: list[tuple[float, float, str, float]], height: float) -> list[OcrLine]:
@@ -109,7 +110,8 @@ def group_lines(boxes: list[tuple[float, float, str, float]], height: float) -> 
 
 
 def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
-                 start_date: tuple[int, int] | None = None) -> ScreenResult:
+                 start_date: tuple[int, int] | None = None, cut_top: bool = True,
+                 cut_bottom: bool = True) -> ScreenResult:
     """`start_date`: última data da captura anterior. Linhas no topo desta captura, antes do primeiro
     cabeçalho de data, pertencem a ela (o cabeçalho rolou para fora da tela). A remoção de
     sobreposição descarta as que já estavam na captura anterior."""
@@ -119,7 +121,9 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
         if m and ln.y < 0.5 * height:
             res.card_month = [plain(n) for n in MONTH_NAMES].index(m.group(1)) + 1
             break
-    body = [ln for ln in lines if TOP_CUT * height < ln.y < BOTTOM_CUT * height]
+    # margens com barra de status/navegação; pedaços do meio de uma captura rolada não têm
+    lo, hi = (TOP_CUT * height if cut_top else -1), (BOTTOM_CUT * height if cut_bottom else height + 1)
+    body = [ln for ln in lines if lo < ln.y < hi]
     card = [i for i, ln in enumerate(body) if CARD_RE.search(plain(ln.text))]
     if card:
         # captura do topo da lista: o cartão-resumo não é transação, e nada aqui herda a data anterior
@@ -133,6 +137,8 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
         if d:
             mon = MONTHS.get(plain(d.group(3)))
             date = (int(d.group(2)), mon) if mon else date
+            if mon:
+                res.headers.append((ln.y, date))
             saw_header = True
             continue
         a = AMOUNT_RE.search(text)

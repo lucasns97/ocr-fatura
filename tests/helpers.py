@@ -30,7 +30,8 @@ def font_path() -> str | None:
     return None
 
 
-def render_screenshot(blocks: list[tuple[str, list[tuple[str, str, str, str]]]], width: int = 738) -> bytes:
+def render_screenshot(blocks: list[tuple[str, list[tuple[str, str, str, str]]]], width: int = 738,
+                      height: int = H) -> bytes:
     """Desenha uma captura no estilo do app (tema escuro). blocks = [(cabeçalho de data, [(categoria,
     valor, estabelecimento, parcela)])]. Retorna PNG em bytes."""
     import io
@@ -39,7 +40,7 @@ def render_screenshot(blocks: list[tuple[str, list[tuple[str, str, str, str]]]],
 
     fp = font_path()
     big, small = ImageFont.truetype(fp, 24), ImageFont.truetype(fp, 20)
-    im = Image.new("RGB", (width, H), (30, 30, 32))
+    im = Image.new("RGB", (width, height), (30, 30, 32))
     d = ImageDraw.Draw(im)
     d.text((40, 30), "16:18", font=small, fill=(240, 240, 240))
     d.text((300, 110), "Faturas", font=big, fill=(240, 240, 240))

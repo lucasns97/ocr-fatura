@@ -138,10 +138,10 @@ def create_app(token: str | None = None, home: Path | None = None, read_lines=No
 
         stop = threading.Event()
 
-        def progress(i: int, state: str) -> None:  # chamado na thread do OCR
-            if stop.is_set():  # a página fechou/recarregou: não lê as capturas que faltam
+        def progress(i: int, state: str, **extra) -> None:  # chamado na thread do OCR
+            if stop.is_set():  # a página fechou/recarregou: não lê as capturas/pedaços que faltam
                 raise _Stopped
-            loop.call_soon_threadsafe(queue.put_nowait, {"event": "image", "index": i, "state": state})
+            loop.call_soon_threadsafe(queue.put_nowait, {"event": "image", "index": i, "state": state, **extra})
 
         async def work() -> None:
             try:

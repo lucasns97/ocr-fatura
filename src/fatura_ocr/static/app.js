@@ -141,6 +141,7 @@ async function processStream(fd, onEvent) {
 /* Progresso da leitura, guiado pelos eventos reais do servidor (ele lê uma captura por vez):
    - "start": o cartão começa a encher, pelo tempo médio por imagem, e para em 95% se demorar mais;
    - "done": o fundo vai a 100% e o contorno + ✓ aparecem juntos (pula do meio para o fim, se preciso);
+   - "part": captura rolada lida em pedaços; cada pedaço lido avança a barra de verdade (frac);
    - "skipped": captura igual a uma anterior, marcada como ignorada.
    O tempo médio é aprendido com as durações reais e guardado para a próxima leitura. */
 const MS_KEY = "fatura-ocr:ms-por-imagem";
@@ -150,6 +151,8 @@ function msPerImage() {
 function startProgress() {
   const ol = $("#files"), lis = [...ol.children], n = lis.length, status = $("#status");
   let per = msPerImage();
+  // por cartão em leitura: t0 (início do trecho atual), base (fração já confirmada pelo servidor),
+  // span (quanto o trecho atual vale), parts (pedaços de uma captura rolada), first (início real), shown
   const started = new Map(), durations = [];
   // trava a lista de verdade (mouse e teclado) enquanto lê
   S.busy = true;
@@ -159,18 +162,30 @@ function startProgress() {
   lis.forEach((li) => { li.classList.remove("done", "skipped", "reading"); li.style.setProperty("--p", "0%"); });
   const tick = () => {
     const now = performance.now();
-    started.forEach((t0, i) => lis[i].style.setProperty("--p", (Math.min(0.95, (now - t0) / per) * 100).toFixed(1) + "%"));
+    started.forEach((c, i) => {
+      // estimativa dentro do trecho atual, sem passar de 95% e sem nunca voltar
+      c.shown = Math.max(c.shown, Math.min(0.95, c.base + c.span * Math.min(1, (now - c.t0) / per)));
+      lis[i].style.setProperty("--p", (c.shown * 100).toFixed(1) + "%");
+    });
   };
   const timer = setInterval(tick, 80);
   const finished = () => lis.filter((li) => li.classList.contains("done") || li.classList.contains("skipped")).length;
   return {
-    event({ index: i, state }) {
+    event({ index: i, state, frac = 0, parts = 0 }) {
       const li = lis[i]; if (!li) return;
       if (state === "start") {
-        started.set(i, performance.now()); li.classList.add("reading");
+        const now = performance.now();
+        started.set(i, { t0: now, first: now, base: 0, span: 1, parts: 1, shown: 0 }); li.classList.add("reading");
         status.textContent = `Lendo captura ${i + 1} de ${n}…`;
+      } else if (state === "part") { // captura rolada: o servidor confirmou mais um pedaço lido
+        const c = started.get(i); if (!c) return;
+        c.parts = parts || 1; c.base = Math.max(c.base, frac); c.span = 1 / c.parts; c.t0 = performance.now();
+        c.shown = Math.max(c.shown, Math.min(0.95, c.base));
       } else {
-        if (state === "done" && started.has(i)) { durations.push(performance.now() - started.get(i)); per = durations.reduce((a, b) => a + b, 0) / durations.length; }
+        const c = started.get(i);
+        if (state === "done" && c) { // tempo por "tela": uma captura rolada conta como seus pedaços
+          durations.push((performance.now() - c.first) / c.parts); per = durations.reduce((a, b) => a + b, 0) / durations.length;
+        }
         started.delete(i); li.classList.remove("reading");
         li.style.setProperty("--p", "100%"); li.classList.add(state === "skipped" ? "skipped" : "done");
         if (finished() === n) status.textContent = "Montando a tabela…";

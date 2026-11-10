@@ -148,6 +148,16 @@ class Process(unittest.TestCase):
                            read_lines=read, progress=progress)
         self.assertEqual(calls, [b"A"])
 
+    def test_tile_layout_for_tall_images(self):
+        from fatura_ocr.ocr import TILE_RATIO, tile_tops
+        self.assertEqual(tile_tops(1600, 738), [0])            # captura normal: um pedaço só
+        tops = tile_tops(9378, 1080)                           # captura rolada de 1080 x 9378
+        tile = int(1080 * TILE_RATIO)
+        self.assertEqual(tops[0], 0)
+        self.assertEqual(tops[-1] + tile, 9378)                # o último encosta no fim
+        for a, b in zip(tops, tops[1:]):
+            self.assertGreaterEqual(a + tile - b, 0.35 * tile)  # sobreposição generosa entre vizinhos
+
     def test_total_mismatch_is_left_to_the_page(self):
         # a página recalcula a conferência a cada edição; o servidor não pode mandar uma mensagem fixa
         s = screen(*tx("Sexta, 14 de ago", "Outros", "-R$ 1,00", "LOJA A"))
