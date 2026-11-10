@@ -80,11 +80,13 @@ button.ghost { background: transparent; }
   background: color-mix(in srgb, var(--accent) 16%, transparent); transition: width .15s linear; }
 .files li > * { position: relative; }
 .files li.done { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.files li.done .nm::before { content: "✓ "; color: var(--accent); font-weight: 700; }
+/* ✓ depois do nome (não empurra o texto); o nome é que encurta com "…", o ✓ sempre aparece */
+.files li.done .nm::after { content: "✓"; flex: none; color: var(--accent); font-weight: 700; }
 .files.busy .ctl button, .drop.busy { pointer-events: none; opacity: .45; }
 @media (prefers-reduced-motion: reduce) { .files li::before { transition: none; } }
 .files img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; background: var(--surface-2); }
-.files .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.files .nm { display: flex; gap: 6px; min-width: 0; font-size: 13px; }
+.files .nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .files .ctl { display: flex; gap: 4px; }
 .files .ctl button { padding: 4px 9px; }
 .actions { display: flex; align-items: center; gap: 14px; margin-top: 14px; }

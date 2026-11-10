@@ -93,8 +93,8 @@ function renderFiles() {
   const ol = $("#files"); ol.innerHTML = "";
   S.files.forEach((f, i) => {
     const li = document.createElement("li");
-    li.innerHTML = `<img alt=""><span class="nm"></span><span class="ctl"><button title="Subir" aria-label="Mover para cima">↑</button><button title="Descer" aria-label="Mover para baixo">↓</button><button title="Remover" aria-label="Remover">✕</button></span>`;
-    $("img", li).src = f.url; $(".nm", li).textContent = `${i + 1}. ${f.file.name}`;
+    li.innerHTML = `<img alt=""><span class="nm"><span class="t"></span></span><span class="ctl"><button title="Subir" aria-label="Mover para cima">↑</button><button title="Descer" aria-label="Mover para baixo">↓</button><button title="Remover" aria-label="Remover">✕</button></span>`;
+    $("img", li).src = f.url; $(".nm .t", li).textContent = `${i + 1}. ${f.file.name}`;
     const [up, down, rm] = li.querySelectorAll("button");
     up.disabled = i === 0; down.disabled = i === S.files.length - 1;
     up.onclick = () => { [S.files[i - 1], S.files[i]] = [S.files[i], S.files[i - 1]]; renderFiles(); };
