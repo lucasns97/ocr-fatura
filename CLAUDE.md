@@ -7,9 +7,16 @@ The repo is **public**: never commit screenshots, statements, CSVs or `merchant_
 ## Commands
 
 ```sh
+uv sync                           # Python 3.12 (.python-version) + deps into .venv
+uv run fatura --no-browser        # app at http://127.0.0.1:8765 (FATURA_OCR_HOME=<dir> isolates the alias file)
 ./scripts/verify.sh               # every local check; the commit hook and CI both run it
+uv run python -m unittest discover -s tests -p 'test_*.py'   # tests only
 ```
-The app's own install, run and test commands are added here when the app lands.
+Layout: `src/fatura_ocr/` (`parser.py` reads one screenshot's OCR lines, `pipeline.py` merges screenshots, removes
+overlap, infers years and canonical merchant names, `csvio.py`, `server.py` FastAPI + token/Host guard, `cli.py` the
+`fatura` command, `static/` the UI with no external libraries). Windows entry points: `instalar.cmd`/`.ps1`,
+`iniciar.cmd`/`.ps1`, `desinstalar.cmd`/`.ps1`. CI runs `verify.sh` on Ubuntu and, on `windows-latest`, the real
+installer, launcher and uninstaller.
 
 ## Workflow: branch → review → PR → CI → squash-merge
 
@@ -36,8 +43,10 @@ Agent notes:
 
 ## Conventions
 
-- **Python 3.11+, managed with `uv`.** Dependencies live in `pyproject.toml`; keep the install small (the user installs on Windows) and prefer wheels over anything that compiles.
-- **Local only.** The server binds to 127.0.0.1 and makes no network calls at run time. The UI loads no CDN assets, so it works offline.
+- **Python 3.12 via `uv`** (`.python-version`; `requires-python` allows 3.10-3.13). Dependencies live in `pyproject.toml` with `uv.lock` committed; keep the install small (the user installs on Windows) and prefer wheels over anything that compiles. rapidocr already pulls `opencv-python`: never add `opencv-python-headless` too (both install `cv2` and conflict).
+- **Windows scripts (`*.ps1`, `*.cmd`) are ASCII-only with CRLF** (`.gitattributes` stores them as-is; `verify.sh` checks). Windows PowerShell 5 garbles accents in BOM-less files, and `cmd.exe` reads a batch file while running it, so the installer's `.cmd` does its work on its last line. `.ps1` files don't run on double-click; every user-facing one has a `.cmd` wrapper. Never `exit` in `instalar.ps1`: it also runs via `irm | iex`, where `exit` would close the user's PowerShell window.
+- **Test data is synthetic** (`tests/helpers.py` renders fake screenshots with Pillow). Check real screenshots only from the scratchpad.
+- **Local only.** The server binds to 127.0.0.1 and makes no network calls at run time. The UI loads no CDN assets, so it works offline. Every `/api` call needs the per-run token embedded in the page, and the Host header must be local (DNS rebinding): the server can write files, so keep both checks.
 - **Money is exact.** Amounts are integer centavos internally; format as pt-BR (`1.234,56`) only at the edges.
 - **Report OCR honestly.** The OCR can misread text; the UI shows per-row confidence and flags rows to review rather than implying accuracy.
 
