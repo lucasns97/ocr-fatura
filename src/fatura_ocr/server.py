@@ -7,14 +7,16 @@ navegador (janela "Salvar como" ou download); o servidor não grava arquivos esc
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
 import os
 import secrets
 from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -95,7 +97,7 @@ def create_app(token: str | None = None, home: Path | None = None, read_lines=No
 
     @app.post("/api/process")
     async def process(ano: int = Form(...), mes: int = Form(...), fechamento: str = Form(""),
-                      total: str = Form(""), files: list[UploadFile] = File(...)):
+                      total: str = Form(""), files: list[UploadFile] = File(...), stream: bool = False):
         if not 1 <= mes <= 12 or not 2000 <= ano <= 2100:
             raise HTTPException(422, "Mês ou ano inválido.")
         if not files or len(files) > MAX_FILES:
@@ -114,12 +116,42 @@ def create_app(token: str | None = None, home: Path | None = None, read_lines=No
             total_cents = parse_user_money(total) if total.strip() else None
         except ValueError:
             raise HTTPException(422, "Total da fatura inválido (ex.: R$ 1.234,56).") from None
-        try:
-            res = await _run(process_images, images, ano, mes, closing, total_cents, aliases, read_lines)
-        except ValueError as e:
-            raise HTTPException(422, str(e)) from None
-        return {"rows": res.rows, "warnings": res.warnings, "stats": res.stats,
-                "filename": csvio.filename(ano, mes)}
+        result = lambda res: {"rows": res.rows, "warnings": res.warnings, "stats": res.stats,  # noqa: E731
+                              "filename": csvio.filename(ano, mes)}
+        if not stream:
+            try:
+                res = await _run(process_images, images, ano, mes, closing, total_cents, aliases, read_lines)
+            except ValueError as e:
+                raise HTTPException(422, str(e)) from None
+            return result(res)
+
+        # ?stream=1: uma linha JSON por evento, na hora em que acontece ({"event": "image", "index", "state"}),
+        # e por último {"event": "result", ...} ou {"event": "error", "detail"}. A página mostra o progresso real.
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+
+        def progress(i: int, state: str) -> None:  # chamado na thread do OCR
+            loop.call_soon_threadsafe(queue.put_nowait, {"event": "image", "index": i, "state": state})
+
+        async def work() -> None:
+            try:
+                res = await _run(process_images, images, ano, mes, closing, total_cents, aliases, read_lines, progress)
+                await queue.put({"event": "result", **result(res)})
+            except ValueError as e:
+                await queue.put({"event": "error", "detail": str(e)})
+            except Exception:  # noqa: BLE001 - a página precisa saber que acabou
+                await queue.put({"event": "error", "detail": "Erro inesperado ao ler as capturas."})
+            await queue.put(None)
+
+        task = asyncio.create_task(work())
+
+        async def events():
+            while (item := await queue.get()) is not None:
+                yield json.dumps(item, ensure_ascii=False) + "\n"
+            await task
+
+        return StreamingResponse(events(), media_type="application/x-ndjson",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.post("/api/normalize")
     def normalize(body: NormalizeBody):

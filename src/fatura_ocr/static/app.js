@@ -119,7 +119,7 @@ $("#go").addEventListener("click", async () => {
   S.files.forEach((f) => fd.append("files", f.file, f.file.name));
   const progress = startProgress();
   try {
-    const r = await api("/api/process", fd, true);
+    const r = await processStream(fd, progress.event); // eventos reais de cada captura + resultado
     progress.finish(true);
     S.meta = { ...m, stats: r.stats };
     S.original = clone(r.rows); S.rows = clone(r.rows); S.draft = clone(r.rows); S.edited = false;
@@ -129,44 +129,78 @@ $("#go").addEventListener("click", async () => {
   btn.disabled = S.files.length === 0;
 });
 
-/* Progresso da leitura: o servidor lê as capturas em sequência e só responde no fim, então o
-   andamento de cada cartão é ESTIMADO pelo tempo médio por imagem (aprendido nas leituras anteriores).
-   Cartão em leitura: fundo enchendo; tempo estimado passou: fundo cheio + contorno claro; o servidor
-   terminou: contorno forte + ✓ (só aí é fato). O último espera em 97% até a resposta. */
+/* Lê /api/process?stream=1: uma linha JSON por evento. "image" (start/done/skipped de cada captura)
+   vai para onEvent na hora em que acontece; "result" é a resposta final; "error" vira exceção. */
+async function processStream(fd, onEvent) {
+  const res = await fetch("/api/process?stream=1", { method: "POST", headers: { "X-Token": TOKEN }, body: fd });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(typeof d.detail === "string" ? d.detail : "Erro inesperado."); }
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = "", result = null;
+  const handle = (line) => {
+    if (!line.trim()) return;
+    const ev = JSON.parse(line);
+    if (ev.event === "image") onEvent(ev);
+    else if (ev.event === "result") result = ev;
+    else if (ev.event === "error") throw new Error(ev.detail || "Erro inesperado.");
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) { handle(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
+  }
+  handle(buf + dec.decode());
+  if (!result) throw new Error("A leitura terminou sem resposta. Tente de novo.");
+  return result;
+}
+
+/* Progresso da leitura, guiado pelos eventos reais do servidor (ele lê uma captura por vez):
+   - "start": o cartão começa a encher, pelo tempo médio por imagem, e para em 95% se demorar mais;
+   - "done": o fundo vai a 100% e o contorno + ✓ aparecem juntos (pula do meio para o fim, se preciso);
+   - "skipped": captura igual a uma anterior, marcada como ignorada.
+   O tempo médio é aprendido com as durações reais e guardado para a próxima leitura. */
 const MS_KEY = "fatura-ocr:ms-por-imagem";
 function msPerImage() {
   try { const v = Number(localStorage.getItem(MS_KEY)); return v > 200 && v < 20000 ? v : 1500; } catch { return 1500; }
 }
 function startProgress() {
-  const ol = $("#files"), lis = [...ol.children], n = lis.length, per = msPerImage(), t0 = performance.now();
-  const status = $("#status");
+  const ol = $("#files"), lis = [...ol.children], n = lis.length, status = $("#status");
+  let per = msPerImage();
+  const started = new Map(), durations = [];
   // trava a lista de verdade (mouse e teclado) enquanto lê
   S.busy = true;
   const btns = [...ol.querySelectorAll("button")], prev = btns.map((b) => b.disabled);
   btns.forEach((b) => { b.disabled = true; });
   ol.classList.add("busy"); drop.classList.add("busy"); drop.setAttribute("aria-disabled", "true");
-  lis.forEach((li) => { li.classList.remove("done", "est"); li.style.setProperty("--p", "0%"); });
-  let shown = -1, timer = null;
+  lis.forEach((li) => { li.classList.remove("done", "skipped", "reading"); li.style.setProperty("--p", "0%"); });
   const tick = () => {
-    const el = performance.now() - t0;
-    lis.forEach((li, i) => {
-      const p = Math.max(0, Math.min(i === n - 1 ? 0.97 : 1, (el - i * per) / per));
-      li.style.setProperty("--p", (p * 100).toFixed(1) + "%");
-      li.classList.toggle("est", p >= 1); // estimativa: fundo cheio e contorno claro; ✓ só quando o servidor terminar
-    });
-    const cur = Math.min(n - 1, Math.floor(el / per));
-    if (cur !== shown) { shown = cur; status.textContent = `Lendo as capturas… (estimativa: ${cur + 1} de ${n})`; }
+    const now = performance.now();
+    started.forEach((t0, i) => lis[i].style.setProperty("--p", (Math.min(0.95, (now - t0) / per) * 100).toFixed(1) + "%"));
   };
-  tick(); timer = setInterval(tick, 100);
+  const timer = setInterval(tick, 80);
+  const finished = () => lis.filter((li) => li.classList.contains("done") || li.classList.contains("skipped")).length;
   return {
+    event({ index: i, state }) {
+      const li = lis[i]; if (!li) return;
+      if (state === "start") {
+        started.set(i, performance.now()); li.classList.add("reading");
+        status.textContent = `Lendo captura ${i + 1} de ${n}…`;
+      } else {
+        if (state === "done" && started.has(i)) { durations.push(performance.now() - started.get(i)); per = durations.reduce((a, b) => a + b, 0) / durations.length; }
+        started.delete(i); li.classList.remove("reading");
+        li.style.setProperty("--p", "100%"); li.classList.add(state === "skipped" ? "skipped" : "done");
+        if (finished() === n) status.textContent = "Montando a tabela…";
+      }
+    },
     finish(ok) {
+      clearInterval(timer);
       S.busy = false; btns.forEach((b, i) => { b.disabled = prev[i]; });
-      clearInterval(timer); ol.classList.remove("busy"); drop.classList.remove("busy"); drop.removeAttribute("aria-disabled");
-      if (ok) {
-        lis.forEach((li) => { li.style.setProperty("--p", "100%"); li.classList.remove("est"); li.classList.add("done"); });
-        const real = (performance.now() - t0) / n; // média suavizada para a próxima estimativa
-        try { localStorage.setItem(MS_KEY, String(Math.round(0.5 * per + 0.5 * real))); } catch { /* sem armazenamento: usa o padrão */ }
-      } else lis.forEach((li) => { li.classList.remove("done", "est"); li.style.setProperty("--p", "0%"); });
+      ol.classList.remove("busy"); drop.classList.remove("busy"); drop.removeAttribute("aria-disabled");
+      if (ok && durations.length) {
+        try { localStorage.setItem(MS_KEY, String(Math.round(per))); } catch { /* sem armazenamento: usa o padrão */ }
+      }
+      if (!ok) lis.forEach((li) => { li.classList.remove("done", "skipped", "reading"); li.style.setProperty("--p", "0%"); });
     },
   };
 }

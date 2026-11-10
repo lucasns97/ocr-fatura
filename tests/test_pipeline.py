@@ -119,6 +119,16 @@ class Process(unittest.TestCase):
         self.assertTrue(res.stats["reconciliation"]["ok"])
         self.assertEqual(sum("igual à imagem" in w for w in res.warnings), 2)
 
+    def test_progress_events_in_order(self):
+        s1 = screen(*tx("Sexta, 14 de ago", "Outros", "-R$ 1,00", "LOJA A"))
+        s2 = screen(*tx("Quinta, 13 de ago", "Outros", "-R$ 2,00", "LOJA B"))
+        fake = {b"1": (s1, H), b"2": (s2, H)}
+        events = []
+        with tempfile.TemporaryDirectory() as tmp:
+            process_images([b"1", b"2", b"1"], 2026, 9, None, None, AliasStore(Path(tmp) / "a.json"),
+                           read_lines=fake.__getitem__, progress=lambda i, st: events.append((i, st)))
+        self.assertEqual(events, [(0, "start"), (0, "done"), (1, "start"), (1, "done"), (2, "skipped")])
+
     def test_total_mismatch_is_left_to_the_page(self):
         # a página recalcula a conferência a cada edição; o servidor não pode mandar uma mensagem fixa
         s = screen(*tx("Sexta, 14 de ago", "Outros", "-R$ 1,00", "LOJA A"))
