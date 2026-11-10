@@ -68,18 +68,21 @@ totalEl.addEventListener("focus", () => setTimeout(() => totalEl.setSelectionRan
 
 /* ---------- step 2: files ---------- */
 const drop = $("#drop"), input = $("#file");
-drop.addEventListener("click", () => input.click());
-drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
+drop.addEventListener("click", () => { if (!S.busy) input.click(); });
+drop.addEventListener("keydown", (e) => { if (S.busy) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
 ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+drop.addEventListener("drop", (e) => { if (!S.busy) addFiles(e.dataTransfer.files); });
 input.addEventListener("change", () => { addFiles(input.files); input.value = ""; });
 
 function addFiles(list) {
   const imgs = [...list].filter((f) => f.type.startsWith("image/"));
   if (imgs.length < list.length) toast("Arquivos que não são imagem foram ignorados.");
   // ordem natural pelo nome (capturas do celular têm data/hora no nome)
-  imgs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  // ordem natural pelo nome SEM a extensão: o WhatsApp numera repetidas como "X.jpeg", "X 2.jpeg",
+  // "X 3.jpeg"; comparando com a extensão, "X 2" vinha antes de "X" (a primeira captura)
+  const stem = (n) => n.replace(/\.[^.]+$/, "");
+  imgs.sort((a, b) => stem(a.name).localeCompare(stem(b.name), undefined, { numeric: true }) || a.name.localeCompare(b.name));
   const same = (a, b) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
   let dup = 0;
   imgs.forEach((f) => { if (S.files.some((x) => same(x.file, f))) dup += 1; else S.files.push({ file: f, url: URL.createObjectURL(f) }); });
@@ -90,8 +93,8 @@ function renderFiles() {
   const ol = $("#files"); ol.innerHTML = "";
   S.files.forEach((f, i) => {
     const li = document.createElement("li");
-    li.innerHTML = `<img alt=""><span class="nm"></span><span class="ctl"><button title="Subir" aria-label="Mover para cima">↑</button><button title="Descer" aria-label="Mover para baixo">↓</button><button title="Remover" aria-label="Remover">✕</button></span>`;
-    $("img", li).src = f.url; $(".nm", li).textContent = `${i + 1}. ${f.file.name}`;
+    li.innerHTML = `<img alt=""><span class="nm"><span class="t"></span></span><span class="ctl"><button title="Subir" aria-label="Mover para cima">↑</button><button title="Descer" aria-label="Mover para baixo">↓</button><button title="Remover" aria-label="Remover">✕</button></span>`;
+    $("img", li).src = f.url; $(".nm .t", li).textContent = `${i + 1}. ${f.file.name}`;
     const [up, down, rm] = li.querySelectorAll("button");
     up.disabled = i === 0; down.disabled = i === S.files.length - 1;
     up.onclick = () => { [S.files[i - 1], S.files[i]] = [S.files[i], S.files[i - 1]]; renderFiles(); };
@@ -99,13 +102,14 @@ function renderFiles() {
     rm.onclick = () => { URL.revokeObjectURL(f.url); S.files.splice(i, 1); renderFiles(); };
     ol.append(li);
   });
-  $("#go").disabled = S.files.length === 0;
+  $("#go").disabled = S.busy || S.files.length === 0;
   if (S.meta) $("#sum-files").textContent = S.files.length === S.readCount
     ? `${S.readCount} captura(s) lida(s) · clique para trocar ou ler de novo`
     : `${S.files.length} captura(s) · a lista mudou, clique em Ler capturas`;
 }
 
 $("#go").addEventListener("click", async () => {
+  if (S.busy) return;
   if (S.meta && (S.edited || diffCount(S.rows, S.draft)) && !confirm("Ler de novo descarta suas edições. Continuar?")) return;
   const btn = $("#go"), status = $("#status");
   btn.disabled = true; status.textContent = "Lendo as capturas… (cerca de 1 s por imagem)";
@@ -113,15 +117,59 @@ $("#go").addEventListener("click", async () => {
   const m = meta(); fd.append("ano", m.ano); fd.append("mes", m.mes);
   fd.append("fechamento", $("#fechamento").value); fd.append("total", $("#total").value);
   S.files.forEach((f) => fd.append("files", f.file, f.file.name));
+  const progress = startProgress();
   try {
     const r = await api("/api/process", fd, true);
+    progress.finish(true);
     S.meta = { ...m, stats: r.stats };
     S.original = clone(r.rows); S.rows = clone(r.rows); S.draft = clone(r.rows); S.edited = false;
     showResults(r);
     status.textContent = "";
-  } catch (e) { status.textContent = ""; toast(e.message, 8000); }
+  } catch (e) { progress.finish(false); status.textContent = ""; toast(e.message, 8000); }
   btn.disabled = S.files.length === 0;
 });
+
+/* Progresso da leitura: o servidor lê as capturas em sequência e só responde no fim, então o
+   andamento de cada cartão é ESTIMADO pelo tempo médio por imagem (aprendido nas leituras anteriores).
+   Cartão em leitura: fundo enchendo; tempo estimado passou: fundo cheio + contorno claro; o servidor
+   terminou: contorno forte + ✓ (só aí é fato). O último espera em 97% até a resposta. */
+const MS_KEY = "fatura-ocr:ms-por-imagem";
+function msPerImage() {
+  try { const v = Number(localStorage.getItem(MS_KEY)); return v > 200 && v < 20000 ? v : 1500; } catch { return 1500; }
+}
+function startProgress() {
+  const ol = $("#files"), lis = [...ol.children], n = lis.length, per = msPerImage(), t0 = performance.now();
+  const status = $("#status");
+  // trava a lista de verdade (mouse e teclado) enquanto lê
+  S.busy = true;
+  const btns = [...ol.querySelectorAll("button")], prev = btns.map((b) => b.disabled);
+  btns.forEach((b) => { b.disabled = true; });
+  ol.classList.add("busy"); drop.classList.add("busy"); drop.setAttribute("aria-disabled", "true");
+  lis.forEach((li) => { li.classList.remove("done", "est"); li.style.setProperty("--p", "0%"); });
+  let shown = -1, timer = null;
+  const tick = () => {
+    const el = performance.now() - t0;
+    lis.forEach((li, i) => {
+      const p = Math.max(0, Math.min(i === n - 1 ? 0.97 : 1, (el - i * per) / per));
+      li.style.setProperty("--p", (p * 100).toFixed(1) + "%");
+      li.classList.toggle("est", p >= 1); // estimativa: fundo cheio e contorno claro; ✓ só quando o servidor terminar
+    });
+    const cur = Math.min(n - 1, Math.floor(el / per));
+    if (cur !== shown) { shown = cur; status.textContent = `Lendo as capturas… (estimativa: ${cur + 1} de ${n})`; }
+  };
+  tick(); timer = setInterval(tick, 100);
+  return {
+    finish(ok) {
+      S.busy = false; btns.forEach((b, i) => { b.disabled = prev[i]; });
+      clearInterval(timer); ol.classList.remove("busy"); drop.classList.remove("busy"); drop.removeAttribute("aria-disabled");
+      if (ok) {
+        lis.forEach((li) => { li.style.setProperty("--p", "100%"); li.classList.remove("est"); li.classList.add("done"); });
+        const real = (performance.now() - t0) / n; // média suavizada para a próxima estimativa
+        try { localStorage.setItem(MS_KEY, String(Math.round(0.5 * per + 0.5 * real))); } catch { /* sem armazenamento: usa o padrão */ }
+      } else lis.forEach((li) => { li.classList.remove("done", "est"); li.style.setProperty("--p", "0%"); });
+    },
+  };
+}
 
 /* ---------- results ---------- */
 function showResults(r) {
