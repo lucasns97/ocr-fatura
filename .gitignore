@@ -1,0 +1,16 @@
+# Personal financial data: this repo is public, never commit these
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.csv
+merchant_aliases.json
+data/
+exports/
+
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
