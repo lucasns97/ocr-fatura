@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import calendar
 import difflib
+import hashlib
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -139,7 +140,13 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
     res = Result()
     screens: list[list[RawRow]] = []
     prev_date = None
+    seen: dict[str, int] = {}
     for i, data in enumerate(images):
+        digest = hashlib.sha256(data).hexdigest()
+        if digest in seen:  # mesma captura enviada duas vezes: duplicaria todas as linhas dela
+            res.warnings.append(f"A imagem {i + 1} é igual à imagem {seen[digest] + 1} e foi ignorada.")
+            continue
+        seen[digest] = i
         try:
             lines, height = read_lines(data)
         except ValueError as e:
@@ -171,12 +178,7 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
     res.stats["duplicates_removed"] = sum(removed)
     res.stats["closing"] = closing.isoformat()
     res.stats["reconciliation"] = reconcile(rows, total_cents)
-    rec = res.stats["reconciliation"]
-    if rec and not rec["ok"]:
-        res.warnings.append(
-            f"A soma das compras ({format_money(rec['charges'])}) difere do total informado "
-            f"({format_money(rec['total'])}) em {format_money(abs(rec['diff']))}. Pode faltar uma captura, ou o "
-            f"fechamento da fatura não é o padrão.")
+    # a mensagem da conferência é montada na página, que a recalcula a cada edição salva
     return res
 
 

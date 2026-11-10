@@ -80,7 +80,10 @@ function addFiles(list) {
   if (imgs.length < list.length) toast("Arquivos que não são imagem foram ignorados.");
   // ordem natural pelo nome (capturas do celular têm data/hora no nome)
   imgs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  imgs.forEach((f) => S.files.push({ file: f, url: URL.createObjectURL(f) }));
+  const same = (a, b) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+  let dup = 0;
+  imgs.forEach((f) => { if (S.files.some((x) => same(x.file, f))) dup += 1; else S.files.push({ file: f, url: URL.createObjectURL(f) }); });
+  if (dup) toast(`${dup} captura(s) já estava(m) na lista e não foi(ram) adicionada(s) de novo.`);
   renderFiles();
 }
 function renderFiles() {
@@ -125,15 +128,31 @@ function showResults(r) {
   $("#results").hidden = false;
   const w = $("#warnings"); w.innerHTML = "";
   r.warnings.forEach((t) => { const d = document.createElement("div"); d.className = "notice"; d.textContent = t; w.append(d); });
-  const rec = r.stats.reconciliation;
-  if (rec && rec.ok) { const d = document.createElement("div"); d.className = "notice ok"; d.textContent = `✓ A soma bate com o total informado (${fmt(rec.total)}).`; w.append(d); }
   const st = r.stats;
   const info = document.createElement("div"); info.className = "muted small"; info.style.marginBottom = "10px";
   info.textContent = `${st.rows} transações de ${st.images} captura(s); ${st.duplicates_removed} repetida(s) por sobreposição removida(s).`;
   w.append(info);
-  renderTable(); renderBadge(); renderSummary(); setTab("tabela");
+  renderTable(); renderBadge(); renderSummary(); renderRecon(); setTab("tabela");
   collapseSteps();
   $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* Conferência com o total e linhas a revisar: recalculada a partir da tabela salva (S.rows),
+   então some ou muda assim que o usuário corrige e salva. */
+function renderRecon() {
+  const el = $("#recon"); el.innerHTML = "";
+  const add = (cls, text) => { const d = document.createElement("div"); d.className = "notice" + (cls ? " " + cls : ""); d.textContent = text; el.append(d); };
+  const rec0 = S.meta && S.meta.stats.reconciliation;
+  const toReview = S.rows.filter((r) => r.revisar).length;
+  const reviewTxt = toReview ? ` ${toReview} linha(s) ainda marcada(s) com "revisar".` : "";
+  if (rec0) {
+    const charges = S.rows.reduce((s, r) => s + (r.valor_centavos > 0 ? r.valor_centavos : 0), 0);
+    const net = S.rows.reduce((s, r) => s + (r.valor_centavos || 0), 0);
+    const total = rec0.total, diff = charges - total;
+    if (total === charges || total === net) add("ok", `✓ A soma bate com o total informado (${fmt(total)}).` + reviewTxt);
+    else if (diff > 0) add("", `A soma das compras (${fmt(charges)}) passa do total informado (${fmt(total)}) em ${fmt(diff)}. Pode haver linhas repetidas (a mesma captura enviada duas vezes?) ou de outra fatura.` + reviewTxt);
+    else add("", `A soma das compras (${fmt(charges)}) é menor que o total informado (${fmt(total)}): faltam ${fmt(-diff)}. Pode faltar uma captura, ou o fechamento da fatura não é o padrão (Avançado).` + reviewTxt);
+  } else if (toReview) add("", `${toReview} linha(s) marcada(s) com "revisar": confira o valor e a data delas.`);
 }
 
 /* passos 1 e 2 recolhidos depois da leitura, com um resumo do que foi usado */
@@ -184,7 +203,16 @@ function renderTable() {
       td.append(inp); tr.append(td);
     });
     const td = document.createElement("td");
-    if (r.revisar) { const c = document.createElement("span"); c.className = "chip warn"; c.textContent = "revisar"; c.title = "Leitura incerta (confiança " + Math.round(r.conf * 100) + "%)"; td.append(c); }
+    if (r.revisar) {
+      const c = document.createElement("button"); c.className = "chip warn"; c.textContent = "revisar";
+      c.title = "Leitura incerta (confiança " + Math.round(r.conf * 100) + "%). Clique quando tiver conferido a linha.";
+      c.setAttribute("aria-label", "Marcar linha " + (i + 1) + " como conferida");
+      c.onclick = () => { // conferida: tira a marca (não altera os dados)
+        [S.rows, S.draft, S.original].forEach((arr) => { const x = rowById(arr, r.id); if (x) x.revisar = false; });
+        renderTable(); renderRecon();
+      };
+      td.append(c);
+    }
     const del = document.createElement("button"); del.className = "del"; del.textContent = "✕"; del.title = "Remover linha"; del.setAttribute("aria-label", "Remover linha " + (i + 1));
     del.onclick = () => { S.draft.splice(i, 1); renderTable(); updatePending(); };
     td.append(del); tr.append(td); tb.append(tr);
@@ -203,6 +231,8 @@ $("#add").addEventListener("click", () => {
 });
 $("#save").addEventListener("click", async () => {
   try {
+    // linha corrigida e salva = linha conferida: sai a marca "revisar"
+    S.draft.forEach((d) => { const b = rowById(S.rows, d.id); if (b && FIELDS.some((f) => String(b[f]) !== String(d[f]))) d.revisar = false; });
     const r = await api("/api/normalize", { rows: S.draft, remember: $("#remember").checked });
     if (r.errors.length) {
       renderTable();
@@ -211,14 +241,14 @@ $("#save").addEventListener("click", async () => {
     }
     S.rows = clone(r.rows); S.draft = clone(r.rows);
     const n = diffCount(S.original, S.rows); S.edited = n > 0;
-    renderTable(); renderBadge(); renderSummary();
+    renderTable(); renderBadge(); renderSummary(); renderRecon();
     toast(S.edited ? "Alterações aplicadas. O resultado foi modificado manualmente." : "Alterações aplicadas. O resultado voltou a ser idêntico à leitura automática.");
   } catch (e) { toast(e.message, 7000); }
 });
 $("#reset").addEventListener("click", () => {
   if (!confirm("Descartar todas as edições e voltar ao resultado da leitura automática?")) return;
   S.rows = clone(S.original); S.draft = clone(S.original); S.edited = false;
-  renderTable(); renderBadge(); renderSummary(); toast("Voltou ao resultado da leitura automática.");
+  renderTable(); renderBadge(); renderSummary(); renderRecon(); toast("Voltou ao resultado da leitura automática.");
   // desfaz também os nomes corrigidos que tinham sido lembrados
   api("/api/normalize", { rows: S.original, remember: $("#remember").checked }).catch((e) => toast(e.message, 6000));
 });
