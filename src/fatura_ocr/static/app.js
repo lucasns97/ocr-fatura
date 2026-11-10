@@ -68,11 +68,11 @@ totalEl.addEventListener("focus", () => setTimeout(() => totalEl.setSelectionRan
 
 /* ---------- step 2: files ---------- */
 const drop = $("#drop"), input = $("#file");
-drop.addEventListener("click", () => input.click());
-drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
+drop.addEventListener("click", () => { if (!S.busy) input.click(); });
+drop.addEventListener("keydown", (e) => { if (S.busy) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
 ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+drop.addEventListener("drop", (e) => { if (!S.busy) addFiles(e.dataTransfer.files); });
 input.addEventListener("change", () => { addFiles(input.files); input.value = ""; });
 
 function addFiles(list) {
@@ -102,13 +102,14 @@ function renderFiles() {
     rm.onclick = () => { URL.revokeObjectURL(f.url); S.files.splice(i, 1); renderFiles(); };
     ol.append(li);
   });
-  $("#go").disabled = S.files.length === 0;
+  $("#go").disabled = S.busy || S.files.length === 0;
   if (S.meta) $("#sum-files").textContent = S.files.length === S.readCount
     ? `${S.readCount} captura(s) lida(s) · clique para trocar ou ler de novo`
     : `${S.files.length} captura(s) · a lista mudou, clique em Ler capturas`;
 }
 
 $("#go").addEventListener("click", async () => {
+  if (S.busy) return;
   if (S.meta && (S.edited || diffCount(S.rows, S.draft)) && !confirm("Ler de novo descarta suas edições. Continuar?")) return;
   const btn = $("#go"), status = $("#status");
   btn.disabled = true; status.textContent = "Lendo as capturas… (cerca de 1 s por imagem)";
@@ -130,7 +131,8 @@ $("#go").addEventListener("click", async () => {
 
 /* Progresso da leitura: o servidor lê as capturas em sequência e só responde no fim, então o
    andamento de cada cartão é ESTIMADO pelo tempo médio por imagem (aprendido nas leituras anteriores).
-   Cartão em leitura: fundo enchendo; lido: fundo cheio + contorno + ✓. O último espera em 97% até a resposta. */
+   Cartão em leitura: fundo enchendo; tempo estimado passou: fundo cheio + contorno claro; o servidor
+   terminou: contorno forte + ✓ (só aí é fato). O último espera em 97% até a resposta. */
 const MS_KEY = "fatura-ocr:ms-por-imagem";
 function msPerImage() {
   try { const v = Number(localStorage.getItem(MS_KEY)); return v > 200 && v < 20000 ? v : 1500; } catch { return 1500; }
@@ -138,28 +140,33 @@ function msPerImage() {
 function startProgress() {
   const ol = $("#files"), lis = [...ol.children], n = lis.length, per = msPerImage(), t0 = performance.now();
   const status = $("#status");
-  ol.classList.add("busy"); drop.classList.add("busy");
-  lis.forEach((li) => { li.classList.remove("done"); li.style.setProperty("--p", "0%"); });
+  // trava a lista de verdade (mouse e teclado) enquanto lê
+  S.busy = true;
+  const btns = [...ol.querySelectorAll("button")], prev = btns.map((b) => b.disabled);
+  btns.forEach((b) => { b.disabled = true; });
+  ol.classList.add("busy"); drop.classList.add("busy"); drop.setAttribute("aria-disabled", "true");
+  lis.forEach((li) => { li.classList.remove("done", "est"); li.style.setProperty("--p", "0%"); });
   let shown = -1, timer = null;
   const tick = () => {
     const el = performance.now() - t0;
     lis.forEach((li, i) => {
       const p = Math.max(0, Math.min(i === n - 1 ? 0.97 : 1, (el - i * per) / per));
       li.style.setProperty("--p", (p * 100).toFixed(1) + "%");
-      li.classList.toggle("done", p >= 1);
+      li.classList.toggle("est", p >= 1); // estimativa: fundo cheio e contorno claro; ✓ só quando o servidor terminar
     });
     const cur = Math.min(n - 1, Math.floor(el / per));
-    if (cur !== shown) { shown = cur; status.textContent = `Lendo captura ${cur + 1} de ${n}…`; }
+    if (cur !== shown) { shown = cur; status.textContent = `Lendo as capturas… (estimativa: ${cur + 1} de ${n})`; }
   };
   tick(); timer = setInterval(tick, 100);
   return {
     finish(ok) {
-      clearInterval(timer); ol.classList.remove("busy"); drop.classList.remove("busy");
+      S.busy = false; btns.forEach((b, i) => { b.disabled = prev[i]; });
+      clearInterval(timer); ol.classList.remove("busy"); drop.classList.remove("busy"); drop.removeAttribute("aria-disabled");
       if (ok) {
-        lis.forEach((li) => { li.style.setProperty("--p", "100%"); li.classList.add("done"); });
+        lis.forEach((li) => { li.style.setProperty("--p", "100%"); li.classList.remove("est"); li.classList.add("done"); });
         const real = (performance.now() - t0) / n; // média suavizada para a próxima estimativa
         try { localStorage.setItem(MS_KEY, String(Math.round(0.5 * per + 0.5 * real))); } catch { /* sem armazenamento: usa o padrão */ }
-      } else lis.forEach((li) => { li.classList.remove("done"); li.style.setProperty("--p", "0%"); });
+      } else lis.forEach((li) => { li.classList.remove("done", "est"); li.style.setProperty("--p", "0%"); });
     },
   };
 }

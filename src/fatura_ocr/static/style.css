@@ -82,7 +82,10 @@ button.ghost { background: transparent; }
 .files li.done { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 /* ✓ depois do nome (não empurra o texto); o nome é que encurta com "…", o ✓ sempre aparece */
 .files li.done .nm::after { content: "✓"; flex: none; color: var(--accent); font-weight: 700; }
-.files.busy .ctl button, .drop.busy { pointer-events: none; opacity: .45; }
+.files li.est { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+/* durante a leitura: desabilitado pelo JS (botões disabled, S.busy). Sem pointer-events:none no #drop:
+   ele precisa continuar recebendo o "drop", senão o navegador abre a imagem e a leitura se perde */
+.files.busy .ctl button, .drop.busy { opacity: .45; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { .files li::before { transition: none; } }
 .files img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; background: var(--surface-2); }
 .files .nm { display: flex; gap: 6px; min-width: 0; font-size: 13px; }
