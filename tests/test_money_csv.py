@@ -21,6 +21,10 @@ class Money(unittest.TestCase):
                  "R$ -4,20": -420, "(12,50)": -1250, "1.234": 123400, " 0,99 ": 99}
         for text, cents in cases.items():
             self.assertEqual(parse_user_money(text), cents, text)
+        # mesmos casos positivos do parser do navegador (static/money.js, tests/js/money.test.js)
+        for text, cents in {"1.896,14": 189614, "1896,14": 189614, "R$ 1.896,14": 189614, "1896.14": 189614,
+                            "1,896.14": 189614, "1896": 189600, "R$ 999.999.999,99": 99999999999}.items():
+            self.assertEqual(parse_user_money(text), cents, text)
         for bad in ("", "abc", "R$"):
             with self.assertRaises(ValueError):
                 parse_user_money(bad)
