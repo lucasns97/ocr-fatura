@@ -147,7 +147,7 @@ function renderTable() {
 function updatePending() {
   const n = diffCount(S.rows, S.draft);
   $("#save").disabled = n === 0;
-  $("#pending").textContent = n ? `${n} alteração(ões) não salva(s). Copiar e Salvar CSV usam a última versão salva.` : "";
+  $("#pending").textContent = n ? `${n} alteração(ões) ainda não aplicada(s). Clique em Salvar alterações antes de copiar ou salvar o CSV.` : "";
 }
 $("#add").addEventListener("click", () => {
   const today = new Date(); const dd = String(today.getDate()).padStart(2, "0") + "/" + String(today.getMonth() + 1).padStart(2, "0") + "/" + today.getFullYear();
@@ -219,23 +219,28 @@ async function csvBlob() {
 function download(blob) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename();
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast("Salvo na pasta Downloads como " + filename() + ".", 6000);
+  toast("Baixado como " + filename() + " (pasta de downloads do navegador).", 6000);
 }
+let saving = false;
 $("#savecsv").addEventListener("click", async () => {
+  if (saving) return; // clique duplo: um salvamento por vez
+  saving = true; $("#savecsv").disabled = true;
   try {
+    const blob = await csvBlob(); // primeiro o conteúdo: se falhar, nenhum arquivo vazio é criado
     if (window.showSaveFilePicker) { // Chrome/Edge: janela "Salvar como" do Windows, com o nome já preenchido
       let handle = null;
       try {
-        // abre o seletor já no clique (exigência do navegador); o conteúdo é gerado depois
         handle = await window.showSaveFilePicker({ suggestedName: filename(), types: [{ description: "Planilha CSV", accept: { "text/csv": [".csv"] } }] });
-      } catch (e) { if (e.name === "AbortError") return; }
+      } catch (e) { if (e.name === "AbortError") return; } // cancelou: nada a fazer; outro erro: cai no download
       if (handle) {
-        const blob = await csvBlob(); const w = await handle.createWritable(); await w.write(blob); await w.close();
+        const w = await handle.createWritable();
+        try { await w.write(blob); await w.close(); } catch (e) { await w.abort().catch(() => {}); throw e; }
         toast("Salvo: " + handle.name + "."); return;
       }
     }
-    download(await csvBlob()); // outros navegadores (ou seletor indisponível): download comum
+    download(blob); // outros navegadores (ou seletor indisponível): download comum
   } catch (e) { toast("Não foi possível salvar: " + e.message, 7000); }
+  finally { saving = false; $("#savecsv").disabled = false; }
 });
 ["#mes", "#ano"].forEach((s) => $(s).addEventListener("change", () => {
   if (S.meta) toast("Mês alterado: clique em Ler capturas de novo para recalcular as datas e o nome do arquivo.", 7000);

@@ -39,6 +39,10 @@ class Server(unittest.TestCase):
         r = self.c.get("/")
         self.assertEqual(r.status_code, 200)
         self.assertIn('data-token="t0k"', r.text)
+        from datetime import date
+        from fatura_ocr.server import default_due
+        y, m = default_due(date.today())
+        self.assertIn(f'data-year="{y}" data-month="{m}"', r.text)
         self.assertNotIn("__DEFAULT", r.text)
 
     def test_api_requires_token_and_local_host(self):
