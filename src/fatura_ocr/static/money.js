@@ -17,7 +17,10 @@
     return cents > MAX_CENTS ? null : cents; // número enorme = texto com outras coisas (datas etc.)
   }
 
-  const api = { MAX_CENTS, parsePasted };
+  // Centavos -> número com vírgula decimal e sem separador de milhar ("1896,14"), para colar em planilha.
+  const numBR = (cents) => (cents / 100).toFixed(2).replace(".", ",");
+
+  const api = { MAX_CENTS, parsePasted, numBR };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.FaturaMoney = api;
 })(typeof window !== "undefined" ? window : globalThis);

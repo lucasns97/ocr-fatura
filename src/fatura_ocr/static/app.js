@@ -352,9 +352,10 @@ const HEAD = ["Data", "Lançamento", "Categoria", "Tipo", "Valor"];
 const tsvCell = (v) => { const s = String(v).replace(/[\t\r\n]+/g, " "); return s.includes('"') ? '"' + s.replace(/"/g, '""') + '"' : s; };
 // Valor vai como NÚMERO, não como texto "R$ 31,90": assim a planilha soma, e o usuário escolhe o formato.
 // Texto: vírgula decimal e sem separador de milhar ("1896,14", "-8530,63"), que uma planilha em português
-// lê como número. Tabela HTML: também data-sheets-value com o número exato (o Google Sheets usa isso ao
-// colar entre planilhas), para valer mesmo numa planilha em outro idioma.
-const numBR = (cents) => (cents / 100).toFixed(2).replace(".", ",");
+// lê como número. Tabela HTML: também data-sheets-value (formato que o próprio Google Sheets usa ao copiar);
+// não testado colando no Sheets: provavelmente só vale entre planilhas do Sheets, então numa planilha em
+// outro idioma o valor pode continuar como texto (o README explica como mudar a localidade).
+const { numBR } = window.FaturaMoney; // static/money.js (testado em tests/js/money.test.js)
 const cellsOf = (r) => [r.data, r.lancamento, r.categoria, r.tipo, numBR(r.valor_centavos)];
 function tableText() {
   return [HEAD, ...S.rows.map(cellsOf)].map((row) => row.map(tsvCell).join("\t")).join("\r\n");
