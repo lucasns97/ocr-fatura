@@ -1,0 +1,4 @@
+# Scripts do Windows: guardados com CRLF exatamente como estao (o cmd.exe e o PowerShell 5 esperam CRLF)
+*.cmd -text
+*.ps1 -text
+*.ico binary
