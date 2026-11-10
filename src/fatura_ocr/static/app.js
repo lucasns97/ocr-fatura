@@ -129,30 +129,13 @@ $("#go").addEventListener("click", async () => {
   btn.disabled = S.files.length === 0;
 });
 
-/* Lê /api/process?stream=1: uma linha JSON por evento. "image" (start/done/skipped de cada captura)
-   vai para onEvent na hora em que acontece; "result" é a resposta final; "error" vira exceção. */
+/* /api/process?stream=1: eventos de cada captura em tempo real (leitura em static/stream.js, testada). */
 async function processStream(fd, onEvent) {
-  const res = await fetch("/api/process?stream=1", { method: "POST", headers: { "X-Token": TOKEN }, body: fd });
+  let res;
+  try { res = await fetch("/api/process?stream=1", { method: "POST", headers: { "X-Token": TOKEN }, body: fd }); }
+  catch { throw new Error(window.FaturaStream.LOST); }
   if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(typeof d.detail === "string" ? d.detail : "Erro inesperado."); }
-  const reader = res.body.getReader(), dec = new TextDecoder();
-  let buf = "", result = null;
-  const handle = (line) => {
-    if (!line.trim()) return;
-    const ev = JSON.parse(line);
-    if (ev.event === "image") onEvent(ev);
-    else if (ev.event === "result") result = ev;
-    else if (ev.event === "error") throw new Error(ev.detail || "Erro inesperado.");
-  };
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    let nl;
-    while ((nl = buf.indexOf("\n")) >= 0) { handle(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
-  }
-  handle(buf + dec.decode());
-  if (!result) throw new Error("A leitura terminou sem resposta. Tente de novo.");
-  return result;
+  return window.FaturaStream.readEvents(res.body, onEvent);
 }
 
 /* Progresso da leitura, guiado pelos eventos reais do servidor (ele lê uma captura por vez):

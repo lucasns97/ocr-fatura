@@ -12,6 +12,8 @@ import hashlib
 import json
 import os
 import secrets
+import threading
+import traceback
 from datetime import date
 from pathlib import Path
 
@@ -35,7 +37,11 @@ def app_home() -> Path:
     return Path(os.environ.get("FATURA_OCR_HOME") or Path.home() / ".fatura-ocr")
 
 
-ASSETS = ("app.js", "money.js", "style.css")  # arquivos da página; todos ganham ?v= (cache)
+ASSETS = ("app.js", "money.js", "stream.js", "style.css")  # arquivos da página; todos ganham ?v= (cache)
+
+
+class _Stopped(Exception):
+    """A página que pediu a leitura foi embora: interrompe entre uma captura e outra."""
 
 
 def asset_version() -> str:
@@ -130,25 +136,36 @@ def create_app(token: str | None = None, home: Path | None = None, read_lines=No
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
 
+        stop = threading.Event()
+
         def progress(i: int, state: str) -> None:  # chamado na thread do OCR
+            if stop.is_set():  # a página fechou/recarregou: não lê as capturas que faltam
+                raise _Stopped
             loop.call_soon_threadsafe(queue.put_nowait, {"event": "image", "index": i, "state": state})
 
         async def work() -> None:
             try:
                 res = await _run(process_images, images, ano, mes, closing, total_cents, aliases, read_lines, progress)
                 await queue.put({"event": "result", **result(res)})
+            except _Stopped:
+                pass
             except ValueError as e:
                 await queue.put({"event": "error", "detail": str(e)})
-            except Exception:  # noqa: BLE001 - a página precisa saber que acabou
+            except Exception:  # noqa: BLE001 - a página precisa saber que acabou; o detalhe vai para a janela
+                traceback.print_exc()
                 await queue.put({"event": "error", "detail": "Erro inesperado ao ler as capturas."})
-            await queue.put(None)
+            finally:
+                queue.put_nowait(None)  # sempre encerra o stream, inclusive se a tarefa for cancelada
 
         task = asyncio.create_task(work())
 
         async def events():
-            while (item := await queue.get()) is not None:
-                yield json.dumps(item, ensure_ascii=False) + "\n"
-            await task
+            try:
+                while (item := await queue.get()) is not None:
+                    yield json.dumps(item, ensure_ascii=False) + "\n"
+                await task
+            finally:
+                stop.set()  # terminou ou o cliente desconectou: a thread para antes da próxima captura
 
         return StreamingResponse(events(), media_type="application/x-ndjson",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

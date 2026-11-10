@@ -64,6 +64,7 @@ class Server(unittest.TestCase):
         self.assertIn(f'/static/app.js?v={v}"', r.text)
         self.assertIn(f'/static/style.css?v={v}"', r.text)
         self.assertIn(f'/static/money.js?v={v}"', r.text)
+        self.assertIn(f'/static/stream.js?v={v}"', r.text)
         self.assertEqual(r.headers["cache-control"], "no-cache")
         self.assertEqual(self.c.get(f"/static/app.js?v={v}").headers["cache-control"], "no-cache")
 
@@ -107,9 +108,22 @@ class Server(unittest.TestCase):
         c = TestClient(app, base_url="http://127.0.0.1:8765")
         r = c.post("/api/process?stream=1", data={"ano": "2026", "mes": "9"},
                    files=[("files", ("a.png", b"x", "image/png"))], headers=self.h)
+        self.assertEqual(r.status_code, 200)
         last = json.loads(r.text.strip().splitlines()[-1])
         self.assertEqual(last["event"], "error")
         self.assertIn("Imagem 1", last["detail"])
+
+    def test_process_stream_reports_unexpected_errors(self):
+        import json
+
+        def crash(_):
+            raise RuntimeError("boom")
+        c = TestClient(create_app(token="t0k", home=self.home, read_lines=crash), base_url="http://127.0.0.1:8765")
+        r = c.post("/api/process?stream=1", data={"ano": "2026", "mes": "9"},
+                   files=[("files", ("a.png", b"x", "image/png"))], headers=self.h)
+        self.assertEqual(r.status_code, 200)
+        last = json.loads(r.text.strip().splitlines()[-1])
+        self.assertEqual(last, {"event": "error", "detail": "Erro inesperado ao ler as capturas."})
 
     def test_normalize_remembers_rename_and_its_undo(self):
         aliases = self.home / "merchant_aliases.json"
