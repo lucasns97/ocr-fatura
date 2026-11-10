@@ -135,17 +135,29 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
                    total_cents: int | None, aliases: AliasStore, read_lines=None, progress=None) -> Result:
     """`read_lines` é injetável para testes (substitui o OCR).
 
-    `progress(índice, estado)`, se dado, é chamado quando cada captura começa ("start") e termina
-    ("done", ou "skipped" se for igual a uma anterior): a página mostra o andamento real.
+    `progress(índice, estado, **kw)`, se dado, é chamado quando cada captura começa ("start") e termina
+    ("done", ou "skipped" se for igual a uma anterior): a página mostra o andamento real. Captura
+    rolada: também "part" a cada pedaço, com frac= (0..1) e parts= (nº de pedaços); o callback deve
+    aceitar **kw.
     """
-    progress = progress or (lambda i, state: None)
+    progress = progress or (lambda i, state, **kw: None)
+    small: list[int] = []
     if read_lines is None:
-        from .ocr import read_lines
+        from .ocr import EDGE, MIN_WIDTH, read_screens
+
+        def read(data, on_part):
+            return read_screens(data, on_part, on_width=lambda w: small.append(i) if w < MIN_WIDTH else None)
+    else:  # testes: read_lines(data) -> (linhas, altura) de uma captura normal
+        def read(data, on_part):
+            lines, height = read_lines(data)
+            return [(lines, height, True, True, None)]
     closing = closing or default_closing(year, month)
     res = Result()
     screens: list[list[RawRow]] = []
     prev_date = None
     seen: dict[str, int] = {}
+    read_count, card_warned = 0, False
+    screen_image: list[int] = []  # de qual imagem enviada veio cada "tela" (pedaços de uma rolada = mesma)
     for i, data in enumerate(images):
         digest = hashlib.sha256(data).hexdigest()
         if digest in seen:  # mesma captura enviada duas vezes: duplicaria todas as linhas dela
@@ -155,20 +167,45 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
         seen[digest] = i
         try:
             progress(i, "start")
-            lines, height = read_lines(data)
+            # captura rolada (bem alta) vem em vários pedaços sobrepostos; cada um vira uma "tela" e a
+            # remoção de sobreposição junta tudo, como se fossem capturas separadas
+            parts = read(data, lambda k, n, i=i: progress(i, "part", frac=k / n, parts=n))
         except ValueError as e:
             raise ValueError(f"Imagem {i + 1}: {e}") from e
-        sr = parse_screen(lines, height, i, prev_date)
-        prev_date = sr.last_date or prev_date
-        if sr.card_month and sr.card_month != month:
-            res.warnings.append(
-                f"A imagem {i + 1} mostra a fatura de {MONTH_NAMES[sr.card_month - 1].capitalize()}, "
-                f"mas o mês escolhido é {MONTH_NAMES[month - 1].capitalize()}. Confira o formulário.")
-        if not sr.rows:
+        found = 0
+        headers: list[tuple[float, tuple[int, int]]] = []  # cabeçalhos de data já vistos, em y da imagem inteira
+        for lines, height, cut_top, cut_bottom, y0 in parts:
+            known = False
+            if y0:  # pedaço do meio de uma captura rolada: vale a data do último cabeçalho ACIMA dele
+                # (o pedaço anterior foi além, por causa da sobreposição; a "última data" dele seria de baixo).
+                # Um cabeçalho encostado no topo deste pedaço é descartado por ele (texto cortado), mas
+                # vale para as linhas logo abaixo: por isso a margem.
+                above = [d for y, d in headers if y < y0 + 2 * EDGE * height]
+                start, known = (above[-1], True) if above else (prev_date, False)
+            else:
+                start = prev_date
+            # data vinda de um cabeçalho da mesma imagem é certa: não marca "revisar"
+            sr = parse_screen(lines, height, i, start, cut_top, cut_bottom, start_known=known)
+            if y0 is not None:
+                headers = sorted(set(headers) | {(y0 + y, d) for y, d in sr.headers})
+            prev_date = (headers[-1][1] if headers else None) or sr.last_date or prev_date
+            if sr.card_month and sr.card_month != month and not card_warned:
+                card_warned = True
+                res.warnings.append(
+                    f"A imagem {i + 1} mostra a fatura de {MONTH_NAMES[sr.card_month - 1].capitalize()}, "
+                    f"mas o mês escolhido é {MONTH_NAMES[month - 1].capitalize()}. Confira o formulário.")
+            found += len(sr.rows)
+            screens.append(sr.rows)
+            screen_image.append(i)
+        if not found:
             res.warnings.append(f"Nenhuma transação encontrada na imagem {i + 1}. É a tela 'Faturas' do app?")
-        screens.append(sr.rows)
+        read_count += 1
         progress(i, "done")
     merged, removed = merge_screens(screens)
+    for i in small:
+        res.warnings.append(
+            f"A imagem {i + 1} tem resolução baixa demais para ler bem (foi reduzida ao ser enviada?). "
+            f"Use o arquivo original da captura.")
     rows, undated, late = build_rows(merged, closing, aliases)
     aliases.save()
     if undated:
@@ -178,10 +215,12 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
             f"{late} compra(s) com data depois do fechamento ({closing:%d/%m/%Y}). Se o ano estiver errado, "
             f"ajuste o fechamento em Avançado e leia de novo.")
     res.rows = rows
-    res.stats["images"] = len(screens)               # capturas lidas
-    res.stats["ignored_images"] = len(images) - len(screens)
+    res.stats["images"] = read_count                 # capturas lidas (uma rolada conta como uma)
+    res.stats["ignored_images"] = len(images) - read_count
     res.stats["rows"] = len(rows)
-    res.stats["duplicates_removed"] = sum(removed)
+    # repetidas entre capturas enviadas; a sobreposição entre pedaços de uma mesma captura rolada é
+    # detalhe interno e não entra na conta mostrada ao usuário
+    res.stats["duplicates_removed"] = sum(k for k, a, b in zip(removed, screen_image, screen_image[1:]) if a != b)
     res.stats["closing"] = closing.isoformat()
     res.stats["reconciliation"] = reconcile(rows, total_cents)
     # a mensagem da conferência é montada na página, que a recalcula a cada edição salva

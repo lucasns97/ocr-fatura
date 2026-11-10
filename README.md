@@ -47,7 +47,9 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
 1. Abra o atalho **Fatura OCR**. Uma janela preta abre e, em seguida, o navegador.
    **Deixe a janela preta aberta** enquanto usa; feche-a para encerrar.
 2. No app do Inter, abra **Faturas**, escolha o mês e tire capturas de tela rolando de cima para baixo.
-   **Deixe cada captura repetir um pouco o fim da anterior** (uma ou duas transações): as linhas
+   Se o celular tiver **captura longa (rolada)**, uma imagem só com a fatura inteira também serve.
+   Envie o arquivo original: imagens reduzidas por aplicativo de mensagem ficam ilegíveis (o programa avisa).
+   Com várias capturas, **deixe cada uma repetir um pouco o fim da anterior** (uma ou duas transações): as linhas
    repetidas são removidas, e a repetição garante que nada fique de fora entre uma captura e outra.
 3. No navegador:
    1. **Dados da fatura**: confira o mês da fatura (o mês do **vencimento**). Já vem preenchido com o
