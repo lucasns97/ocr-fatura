@@ -483,17 +483,38 @@ function sumBy(rows, keyFn) {
   const m = new Map(); rows.forEach((r) => m.set(keyFn(r), (m.get(keyFn(r)) || 0) + r.valor_centavos));
   return [...m].sort((a, b) => b[1] - a[1]);
 }
-// credits: pagamentos/devoluções (valores positivos, já em módulo), mostrados abaixo de um divisor, em verde
-// e com escala própria (o pagamento da fatura anterior achataria as barras de compras)
-function hbars(title, pairs, max = 8, credits = []) {
-  let list = pairs.slice(0, max);
-  if (pairs.length > max) list = pairs.slice(0, max - 1).concat([["Demais", pairs.slice(max - 1).reduce((s, p) => s + p[1], 0)]]);
-  const top = Math.max(...list.map((p) => p[1]), 1);
-  const body = list.map(([k, v]) => `<div class="hbar${k === "Demais" && pairs.length > max ? " rest" : ""}"><span class="nm" title="${esc(k)}">${esc(k)}</span><span class="tr"><span class="fl" style="display:block;width:${(v / top * 100).toFixed(1)}%" data-tip="${esc(k)}: ${fmt(v)}" tabindex="0"></span></span><span class="vl">${fmt(v)}</span></div>`).join("");
+// Compra nova = à vista ou 1ª parcela (azul). Parcela antiga = parcela 2 em diante de uma compra de meses
+// anteriores que ainda está sendo paga (laranja). As duas somam o gasto desta fatura, na mesma escala.
+const instNo = (r) => { const m = /^Parcela (\d+)/.exec(r.tipo || ""); return m ? +m[1] : 0; };
+const isOld = (r) => instNo(r) >= 2;
+// Barras empilhadas por categoria/estabelecimento. credits: pagamentos/devoluções (positivos, já em módulo),
+// abaixo de um divisor, em verde e com escala própria (o pagamento da fatura anterior achataria as compras).
+function hbars(title, rows, keyFn, max = 8, credits = [], tag = false) {
+  const m = new Map();
+  rows.forEach((r) => {
+    const k = keyFn(r), e = m.get(k) || { neu: 0, old: 0, rows: [] };
+    e[isOld(r) ? "old" : "neu"] += r.valor_centavos; e.rows.push(r); m.set(k, e);
+  });
+  let list = [...m].map(([k, e]) => ({ k, ...e, t: e.neu + e.old })).sort((x, y) => y.t - x.t);
+  if (list.length > max) {
+    const rest = list.slice(max - 1);
+    list = list.slice(0, max - 1).concat([{ k: "Demais", rest: true, neu: rest.reduce((s, e) => s + e.neu, 0), old: rest.reduce((s, e) => s + e.old, 0), rows: [] }]);
+    list[list.length - 1].t = list[list.length - 1].neu + list[list.length - 1].old;
+  }
+  const top = Math.max(...list.map((e) => e.t), 1);
+  const anyOld = list.some((e) => e.old > 0);
+  const body = list.map((e) => {
+    // estabelecimento com uma só parcela antiga: mostra qual ("parcela 2 de 3"; nunca "2/3", que parece data)
+    const lab = tag && e.rows.length === 1 && isOld(e.rows[0]) ? ` <small class="pt">${esc(e.rows[0].tipo.toLowerCase())}</small>` : "";
+    const tip = `${e.k}: ${fmt(e.t)}` + (e.old ? ` (compras novas ${fmt(e.neu)} · parcelas antigas ${fmt(e.old)})` : "");
+    return `<div class="hbar${e.rest ? " rest" : ""}"><span class="nm" title="${esc(e.k)}">${esc(e.k)}${lab}</span><span class="tr"><span class="fl" style="width:${(e.t / top * 100).toFixed(1)}%" data-tip="${esc(tip)}" tabindex="0">`
+      + (e.neu ? `<i class="n" style="flex:${e.neu}"></i>` : "") + (e.old ? `<i class="o" style="flex:${e.old}"></i>` : "") + `</span></span><span class="vl">${fmt(e.t)}</span></div>`;
+  }).join("");
+  const legend = anyOld ? `<div class="legend lead"><span><i style="background:var(--series-1)"></i>Compras novas</span><span><i style="background:var(--series-2)"></i>Parcelas de compras antigas</span></div>` : "";
   const ctop = Math.max(...credits.map((p) => p[1]), 1);
-  const cred = credits.slice(0, max).map(([k, v]) => `<div class="hbar credit"><span class="nm" title="${esc(k)}">${esc(k)}</span><span class="tr"><span class="fl" style="display:block;width:${(v / ctop * 100).toFixed(1)}%" data-tip="${esc(k)}: -${fmt(v)} (abate da fatura)" tabindex="0"></span></span><span class="vl">-${fmt(v)}</span></div>`).join("");
+  const cred = credits.slice(0, max).map(([k, v]) => `<div class="hbar credit"><span class="nm" title="${esc(k)}">${esc(k)}</span><span class="tr"><span class="fl" style="width:${(v / ctop * 100).toFixed(1)}%" data-tip="${esc(k)}: -${fmt(v)} (abate da fatura)" tabindex="0"><i class="c"></i></span></span><span class="vl">-${fmt(v)}</span></div>`).join("");
   const credBlock = cred ? `<div class="hsep">↩ Pagamentos e devoluções</div>${cred}` : "";
-  return `<div class="card chart w2"><h3>${esc(title)}</h3>${body || '<p class="muted">Sem compras.</p>'}${credBlock}</div>`;
+  return `<div class="card chart w2"><h3>${esc(title)}</h3>${legend}${body || '<p class="muted">Sem compras.</p>'}${credBlock}</div>`;
 }
 function monthColumns(rows) {
   const m = new Map();
@@ -509,13 +530,13 @@ function monthColumns(rows) {
   }).join("");
   return `<div class="card chart w4"><h3>Quando as compras foram feitas</h3><svg class="cols" viewBox="0 0 ${W} ${H}" role="img" aria-label="Valor das compras por mês da compra original">${`<line x1="${pad}" x2="${W}" y1="${H - 22}" y2="${H - 22}"/>`}${bars}</svg><p class="muted small">Compras parceladas aparecem no mês em que foram feitas.</p></div>`;
 }
-function splitBar(rows) { // à vista × parcelado, dentro do bloco do total
-  const a = rows.filter((r) => !/^Parcela/.test(r.tipo)).reduce((s, r) => s + r.valor_centavos, 0);
-  const p = rows.filter((r) => /^Parcela/.test(r.tipo)).reduce((s, r) => s + r.valor_centavos, 0), t = a + p || 1;
-  return `<div class="split"><div class="stack" role="img" aria-label="À vista ${fmt(a)}, parcelado ${fmt(p)}">
-    <span style="flex:${a};background:var(--series-1)" data-tip="À vista: ${fmt(a)} (${(a / t * 100).toFixed(0)}%)"></span>
-    <span style="flex:${p};background:var(--series-2)" data-tip="Parcelado: ${fmt(p)} (${(p / t * 100).toFixed(0)}%)"></span></div>
-    <div class="legend"><span><i style="background:var(--series-1)"></i>À vista ${fmt(a)}</span><span><i style="background:var(--series-2)"></i>Parcelado ${fmt(p)}</span></div></div>`;
+function splitBar(rows) { // compras novas × parcelas de compras antigas, dentro do bloco do total
+  const a = rows.filter((r) => !isOld(r)).reduce((s, r) => s + r.valor_centavos, 0);
+  const p = rows.filter(isOld).reduce((s, r) => s + r.valor_centavos, 0), t = a + p || 1;
+  return `<div class="split"><div class="stack" role="img" aria-label="Compras novas ${fmt(a)}, parcelas de compras antigas ${fmt(p)}">
+    <span style="flex:${a};background:var(--series-1)" data-tip="Compras novas (à vista ou 1ª parcela): ${fmt(a)} (${(a / t * 100).toFixed(0)}%)"></span>
+    <span style="flex:${p};background:var(--series-2)" data-tip="Parcelas de compras antigas: ${fmt(p)} (${(p / t * 100).toFixed(0)}%)"></span></div>
+    <div class="legend"><span><i style="background:var(--series-1)"></i>Compras novas ${fmt(a)}</span><span><i style="background:var(--series-2)"></i>Parcelas antigas ${fmt(p)}</span></div></div>`;
 }
 // o gráfico por mês é desenhado na largura da página: redesenha quando a janela muda de tamanho
 let resizeT;
@@ -539,6 +560,6 @@ function renderSummary() {
     <div class="kpi"><div class="l">Maior compra</div><div class="v">${big ? fmt(big.valor_centavos) : "–"}</div><div class="s">${big ? esc(big.lancamento) : ""}</div></div>
     <div class="kpi credit" title="Valores que abatem da fatura: o pagamento da fatura anterior e compras devolvidas"><div class="l">↩ Pagamentos e devoluções</div><div class="v">${fmt(cr)}</div><div class="s">${pl(credits.length, "lançamento", "lançamentos")} · abatem da fatura</div></div>
     <div class="kpi${toReview ? " warn" : ""}"><div class="l">${toReview ? "⚠ " : "✓ "}Para revisar</div><div class="v">${toReview}</div><div class="s">${toReview ? "leitura incerta: confira na Tabela" : "nenhuma leitura incerta"}</div></div>
-    ${hbars("Gasto por categoria", sumBy(spend, (r) => r.categoria || "SEM CATEGORIA"), 8, sumBy(credits, (r) => r.categoria || "SEM CATEGORIA").map(([k, v]) => [k, -v]).reverse())}${hbars("Onde você mais gastou", sumBy(spend, (r) => r.lancamento || "(sem nome)"), 6, sumBy(credits, (r) => r.lancamento || "(sem nome)").map(([k, v]) => [k, -v]).reverse())}${monthColumns(spend)}</div>
-    <p class="muted small">Os gráficos usam as linhas da tabela (já com suas edições salvas). Pagamentos e devoluções aparecem separados, em verde, abaixo das compras; não entram no total de compras.</p>`;
+    ${hbars("Gasto por categoria", spend, (r) => r.categoria || "SEM CATEGORIA", 8, sumBy(credits, (r) => r.categoria || "SEM CATEGORIA").map(([k, v]) => [k, -v]).reverse())}${hbars("Onde você mais gastou", spend, (r) => r.lancamento || "(sem nome)", 6, sumBy(credits, (r) => r.lancamento || "(sem nome)").map(([k, v]) => [k, -v]).reverse(), true)}${monthColumns(spend)}</div>
+    <p class="muted small">Os gráficos usam as linhas da tabela (já com suas edições salvas). Compras novas: à vista ou 1ª parcela. Parcelas de compras antigas: compras de meses anteriores que você ainda está pagando. Pagamentos e devoluções aparecem à parte, em verde, e não entram no total de compras.</p>`;
 }

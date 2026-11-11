@@ -76,7 +76,9 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
      valor pode virar texto (no Google Sheets, mude em Arquivo → Configurações → Localidade: Brasil).
    - **Salvar CSV**: no Chrome e no Edge abre a janela "Salvar como" do Windows, já com o nome
      `fatura-inter-AAAA-MM.csv`, para você escolher a pasta. Em outros navegadores, o arquivo é baixado como um download comum (normalmente na pasta Downloads).
-6. A aba **Resumo** mostra o total, o gasto por categoria, os maiores estabelecimentos, à vista × parcelado e as compras por mês.
+6. A aba **Resumo** mostra o total, o gasto por categoria, onde você mais gastou e quando as compras foram feitas.
+   Nas barras, **azul** é compra nova (à vista ou 1ª parcela) e **laranja** é parcela de uma compra de meses
+   anteriores que você ainda está pagando. Pagamentos e devoluções aparecem à parte, em verde.
 
 ## Atualizar e desinstalar
 
