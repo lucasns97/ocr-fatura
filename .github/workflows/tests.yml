@@ -46,6 +46,23 @@ jobs:
         run: |
           uv sync --frozen
           uv run --frozen python -W ignore::DeprecationWarning -m unittest discover -s tests -p "test_*.py"
+      - name: Terminal visuals (ui.ps1) run on Windows PowerShell 5.1, animation forced on
+        shell: powershell
+        env:
+          FATURA_OCR_FANCY: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . .\ui.ps1
+          Ui-Banner
+          Ui-Ok 'passo rapido'
+          Ui-Process 'processo' 'cmd.exe' '/c echo linha 1 & ping -n 3 127.0.0.1 >nul & echo linha final'
+          $f = Join-Path $env:TEMP 'ui-download-test.txt'
+          Ui-Download 'baixando' 'https://raw.githubusercontent.com/lucasns97/ocr-fatura/main/README.md' $f
+          if ((Get-Item $f).Length -lt 100) { throw 'download too small' }
+          $failed = $false
+          try { Ui-Process 'falha esperada' 'cmd.exe' '/c echo motivo do erro 1>&2 & exit 3' } catch { $failed = $_.Exception.Message -match 'codigo 3' }
+          if (-not $failed) { throw 'Ui-Process did not report the exit code' }
+          Ui-Box Green @('PRONTO.')
       - name: Install the latest release via "irm | iex" and update in place (not on PRs)
         if: github.event_name != 'pull_request'
         shell: powershell

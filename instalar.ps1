@@ -21,25 +21,34 @@ $ProgressPreference = 'SilentlyContinue'   # deixa os downloads bem mais rapidos
 $Repo = 'lucasns97/ocr-fatura'
 $Dest = Join-Path $env:LOCALAPPDATA 'FaturaOCR'
 
-# Textos para quem nao e da area: passos numerados, nada de caminhos ou nomes tecnicos na tela.
-function Step($n, $msg) { Write-Host ''; Write-Host "[$n/4] $msg" -ForegroundColor Cyan }
-function Detail($msg) { Write-Host "      $msg" -ForegroundColor DarkGray }
-function Box($color, [string[]]$lines) {
-    $bar = '=' * 50
-    Write-Host ''
-    Write-Host $bar -ForegroundColor $color
-    foreach ($l in $lines) { Write-Host "  $l" -ForegroundColor $color }
-    Write-Host $bar -ForegroundColor $color
+# Visual do terminal (ui.ps1: logo, passos animados, barra de download). Fica ao lado deste arquivo; via
+# "irm | iex" vem do GitHub. Se nao der, linhas simples: a instalacao nao depende disso.
+$uiOk = $false
+try {
+    if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot 'ui.ps1'))) { . (Join-Path $PSScriptRoot 'ui.ps1') }
+    else { . ([scriptblock]::Create((Invoke-RestMethod -UseBasicParsing -TimeoutSec 15 -Uri "https://raw.githubusercontent.com/$Repo/main/ui.ps1"))) }
+    $uiOk = [bool](Get-Command Ui-Process -ErrorAction SilentlyContinue)
+} catch { }
+if (-not $uiOk) {
+    function Ui-Banner { Write-Host ''; Write-Host '  FATURA OCR' -ForegroundColor Green; Write-Host '' }
+    function Ui-Ok([string]$label, [string]$what = 'OK') { Write-Host "  > $label ... $what" -ForegroundColor Green }
+    function Ui-Process([string]$label, [string]$file, [string]$arguments, [string]$dir = (Get-Location).Path) {
+        $p = Start-Process -FilePath $file -ArgumentList $arguments -WorkingDirectory $dir -NoNewWindow -PassThru -Wait
+        if ($p.ExitCode -ne 0) { throw "$label falhou (codigo $($p.ExitCode))." }
+        Ui-Ok $label
+    }
+    function Ui-Download([string]$label, [string]$url, [string]$dest) { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest; Ui-Ok $label }
+    function Ui-Box([string]$color, [string[]]$lines) { Write-Host ''; foreach ($l in $lines) { Write-Host "  $l" -ForegroundColor $color } }
 }
 
 function Install-FaturaOcr {
+    if (-not $env:FATURA_OCR_UPDATING) { Ui-Banner }   # atualizando pelo atalho: o logo ja esta na tela
     # 1. uv
-    Step 1 'Preparando a instalacao'
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
-    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    if (Get-Command uv -ErrorAction SilentlyContinue) { Ui-Ok 'preparando' } else {
         # instala o uv (gerenciador de Python da Astral). Processo novo: liga o TLS 1.2 nele tambem (nao herda
-        # a configuracao deste). A saida dele (caminhos, "reinicie o terminal") confunde: so os erros aparecem.
-        powershell -NoProfile -ExecutionPolicy Bypass -Command '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://astral.sh/uv/install.ps1 | iex' | Out-Null
+        # a configuracao deste). A saida dele (caminhos, "reinicie o terminal") fica escondida.
+        Ui-Process 'preparando' 'powershell' '-NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://astral.sh/uv/install.ps1 | iex"'
         if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
             throw 'Nao deu para baixar uma parte do programa. Confira se a internet esta funcionando.'
         }
@@ -54,7 +63,6 @@ function Install-FaturaOcr {
     # Rodando da pasta ja instalada (ou sem pasta, via "irm | iex"): baixa a versao mais recente.
     $isInstalled = $src -and ((Resolve-Path $src).Path.TrimEnd('\') -eq $Dest.TrimEnd('\'))
     if (-not $src -or $isInstalled -or -not (Test-Path (Join-Path $src 'pyproject.toml'))) {
-        Step 2 'Baixando o Fatura OCR'
         $tmp = Join-Path $env:TEMP ('fatura-ocr-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $tmp | Out-Null
         $zip = Join-Path $tmp 'app.zip'
@@ -66,12 +74,9 @@ function Install-FaturaOcr {
             if ($ver -cnotmatch '^v\d+\.\d+\.\d+$') { $ver = $null }
         }
         $ref = if ($ver) { "refs/tags/$ver" } else { 'refs/heads/main' }
-        if ($ver) { Detail "versao $ver" }
-        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$Repo/archive/$ref.zip" -OutFile $zip
+        Ui-Download $(if ($ver) { "baixando $ver" } else { 'baixando' }) "https://github.com/$Repo/archive/$ref.zip" $zip
         Expand-Archive -Path $zip -DestinationPath $tmp -Force
         $src = (Get-ChildItem $tmp -Directory | Select-Object -First 1).FullName
-    } else {
-        Step 2 'Copiando o Fatura OCR'
     }
     New-Item -ItemType Directory -Force -Path $Dest | Out-Null
     # troca os arquivos do programa; mantem o .venv para a atualizacao ser rapida
@@ -81,18 +86,13 @@ function Install-FaturaOcr {
     if ($tmp) { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
     # versao instalada (so quando baixada do GitHub; instalando de uma copia local, fica desconhecida)
     if ($ver) { Set-Content -Path (Join-Path $Dest 'VERSION') -Value $ver -Encoding Ascii }
+    Ui-Ok 'copiando arquivos'
 
     # 3. Python + dependencias
-    Step 3 'Instalando os componentes'
-    Detail 'Na primeira vez leva alguns minutos; pode deixar rodando, mesmo se parecer parado.'
-    Push-Location $Dest
-    try {
-        & uv sync --frozen --no-dev   # mostra o andamento: sem ele a tela parece travada por minutos
-        if ($LASTEXITCODE -ne 0) { throw "A instalacao dos componentes falhou (codigo $LASTEXITCODE)." }
-    } finally { Pop-Location }
+    # na primeira vez leva alguns minutos: a linha fica animada e mostra o que o uv esta fazendo
+    Ui-Process 'componentes' (Get-Command uv).Source 'sync --frozen --no-dev' $Dest
 
     # 4. atalhos
-    Step 4 'Criando o atalho'
     # O Windows guarda o icone em cache pelo caminho do arquivo: com o mesmo caminho, um icone novo
     # continuava aparecendo o antigo (mesmo apagando o atalho). O nome leva um pedaco do hash do
     # conteudo, entao um icone novo tem um caminho novo.
@@ -128,8 +128,9 @@ function Install-FaturaOcr {
         }
         [FaturaOcr.Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
     } catch { }
+    Ui-Ok 'atalho'
 
-    Box Green @('Tudo certo! O Fatura OCR esta instalado.', 'Para abrir: clique no atalho "Fatura OCR"', 'na Area de Trabalho ou no Menu Iniciar.')
+    if (-not $env:FATURA_OCR_UPDATING) { Ui-Box Green @('PRONTO.  Abra pelo atalho "Fatura OCR".') }
     if ($env:CI) { return }   # CI (GitHub Actions): sem pergunta
     if ($env:FATURA_OCR_UPDATING) { return }   # atualizacao pedida pelo atalho: ele mesmo abre a versao nova
     $answer = Read-Host 'Abrir o Fatura OCR agora? Enter = sim, N = nao'
@@ -142,11 +143,9 @@ try {
     # sem "exit": quem colou o comando no PowerShell nao perde a janela
     Write-Host ''
     Write-Host ('Algo deu errado: ' + $_.Exception.Message) -ForegroundColor Red
-    Box Red @('A instalacao parou no meio. O que fazer:',
-              '1. Confira a internet e feche o Fatura OCR, se estiver aberto.',
-              '2. Abra o instalador de novo.',
-              '3. Se falhar de novo, tire um print desta janela e mande',
-              '   para quem te passou o programa.',
-              'Os nomes de lojas que voce corrigiu continuam salvos.')
+    Ui-Box Red @('A instalacao parou.',
+                 '1. Confira a internet; feche o Fatura OCR se estiver aberto.',
+                 '2. Abra o instalador de novo.',
+                 '3. Falhou de novo? Mande um print desta janela.')
     if ($env:CI) { throw }   # so no CI: falha o job em vez de terminar com sucesso
 }
