@@ -46,6 +46,23 @@ jobs:
         run: |
           uv sync --frozen
           uv run --frozen python -W ignore::DeprecationWarning -m unittest discover -s tests -p "test_*.py"
+      - name: Terminal visuals (ui.ps1) run on Windows PowerShell 5.1, animation forced on
+        shell: powershell
+        env:
+          FATURA_OCR_FANCY: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . .\ui.ps1
+          Ui-Banner
+          Ui-Ok 'passo rapido'
+          Ui-Process 'processo' 'cmd.exe' '/c echo linha 1 & ping -n 3 127.0.0.1 >nul & echo linha final'
+          $f = Join-Path $env:TEMP 'ui-download-test.txt'
+          Ui-Download 'baixando' 'https://raw.githubusercontent.com/lucasns97/ocr-fatura/main/README.md' $f
+          if ((Get-Item $f).Length -lt 100) { throw 'download too small' }
+          $failed = $false
+          try { Ui-Process 'falha esperada' 'cmd.exe' '/c echo motivo do erro 1>&2 & exit 3' } catch { $failed = $_.Exception.Message -match 'codigo 3' }
+          if (-not $failed) { throw 'Ui-Process did not report the exit code' }
+          Ui-Box Green @('PRONTO.')
       - name: Install the latest release via "irm | iex" and update in place (not on PRs)
         if: github.event_name != 'pull_request'
         shell: powershell
@@ -80,14 +97,17 @@ jobs:
           # icone versionado pelo conteudo (o cache de icones do Windows e por caminho)
           $icon = ((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).IconLocation -split ',')[0]
           if ($icon -cnotmatch 'fatura-[0-9a-f]{8}\.ico$' -or -not (Test-Path $icon)) { throw "shortcut icon not versioned: $icon" }
-          # de novo por cima: os atalhos existentes sao apagados e recriados (icone novo tambem na Area de Trabalho)
+          # de novo por cima (os atalhos existentes sao apagados e recriados): reinstalar mantem um atalho valido com o
+          # mesmo icone versionado. Nao prova que a Area de Trabalho redesenhou; isso so na maquina do usuario.
           powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar.ps1
           $icon2 = ((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).IconLocation -split ',')[0]
           if ($icon2 -cne $icon -or -not (Test-Path $icon2)) { throw "reinstall: shortcut icon is '$icon2'" }
           $mb = (Get-ChildItem $app -Recurse -Force -File | Measure-Object Length -Sum).Sum / 1MB
           Write-Host ('Installed size: {0:N0} MB' -f $mb)
-      - name: Start with iniciar.ps1 and load the page
+      - name: Start with iniciar.ps1 (animated panel) and load the page
         shell: powershell
+        env:
+          FATURA_OCR_FANCY: '1'   # o CI define CI=true, que desligaria a animacao: testa o caminho do usuario
         run: |
           $app = Join-Path $env:LOCALAPPDATA 'FaturaOCR'
           $p = Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$app\iniciar.ps1",'--no-browser' -PassThru
