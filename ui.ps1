@@ -9,8 +9,8 @@ $global:FUiSpin = @('|', '/', '-', '\')
 function Ui-Cursor([bool]$on) { if ($global:FUiFancy) { try { [Console]::CursorVisible = $on } catch { } } }
 
 function Ui-Fit([string]$s, [int]$n) {
-    # uma linha so, ASCII, no maximo n caracteres (o que vem de outros programas pode ter de tudo)
-    $s = ($s -replace '[^\x20-\x7E]', '').Trim()
+    # uma linha so, no maximo n caracteres (os blocos do scanner ficam; texto de fora passa por Ui-Plain)
+    $s = ($s -replace '[\x00-\x1F]', ' ').TrimEnd()
     if ($s.Length -gt $n) { $s = $s.Substring(0, $n - 3) + '...' }
     return $s.PadRight($n)
 }
@@ -47,6 +47,11 @@ function Ui-Banner {
     }
     Write-Host ''
 }
+
+# texto vindo de outros programas: so ASCII visivel (pode ter cores, barras de progresso, acentos estragados)
+function Ui-Plain([string]$s) { return ($s -replace '\x1B\[[0-9;]*[A-Za-z]', '' -replace '[^\x20-\x7E]', '').Trim() }
+
+function Ui-Size([long]$bytes) { if ($bytes -lt 1MB) { '{0:N0} KB' -f ($bytes / 1KB) } else { '{0:N1} MB' -f ($bytes / 1MB) } }
 
 # uma linha de passo:  > baixando ............ OK
 function Ui-Line([string]$label, [string]$tail, [string]$color = 'Green', [switch]$Final) {
@@ -86,7 +91,7 @@ function Ui-Process([string]$label, [string]$file, [string]$arguments, [string]$
             $last = ''
             try {
                 $tail = Get-Content -Path $err, $out -Tail 1 -ErrorAction SilentlyContinue | Where-Object { $_.Trim() } | Select-Object -Last 1
-                if ($tail) { $last = [string]$tail }
+                if ($tail) { $last = Ui-Plain ([string]$tail) }
             } catch { }
             Ui-Line $label ((Ui-Scanner $t) + '  ' + $global:FUiSpin[$t % 4] + ' ' + $last) 'DarkGreen'
             Start-Sleep -Milliseconds 120
@@ -106,7 +111,7 @@ function Ui-Process([string]$label, [string]$file, [string]$arguments, [string]$
     }
 }
 
-# Baixa um arquivo mostrando os MB que ja chegaram (o GitHub nao informa o tamanho total do zip).
+# Baixa um arquivo mostrando quanto ja chegou (o GitHub nao informa o tamanho total do zip).
 function Ui-Download([string]$label, [string]$url, [string]$dest) {
     $wc = New-Object Net.WebClient
     $task = $wc.DownloadFileTaskAsync($url, $dest)
@@ -114,13 +119,13 @@ function Ui-Download([string]$label, [string]$url, [string]$dest) {
     Ui-Cursor $false
     try {
         while (-not $task.IsCompleted) {
-            $mb = 0; if (Test-Path $dest) { $mb = (Get-Item $dest).Length / 1MB }
-            Ui-Line $label ((Ui-Scanner $t) + ('  {0:N1} MB' -f $mb)) 'DarkGreen'
+            $n = 0; if (Test-Path $dest) { $n = (Get-Item $dest).Length }
+            Ui-Line $label ((Ui-Scanner $t) + '  ' + (Ui-Size $n)) 'DarkGreen'
             Start-Sleep -Milliseconds 100
             $t++
         }
         if ($task.IsFaulted) { throw $task.Exception.GetBaseException() }
-        Ui-Ok $label ('OK  ({0:N1} MB)' -f ((Get-Item $dest).Length / 1MB))
+        Ui-Ok $label ('OK  (' + (Ui-Size (Get-Item $dest).Length) + ')')
     } finally { Ui-Cursor $true; $wc.Dispose() }
 }
 
