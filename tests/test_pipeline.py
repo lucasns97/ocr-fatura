@@ -106,6 +106,20 @@ class Process(unittest.TestCase):
         self.assertEqual(res.rows, [])
         self.assertTrue(any("nenhum título de dia" in w for w in res.warnings), res.warnings)
 
+    def test_tall_capture_with_first_header_past_the_first_piece(self):
+        """Captura rolada cujo 1º título de dia só aparece no 2º pedaço: as linhas do 1º pedaço não podem sumir."""
+        from unittest import mock
+        p1 = screen(*tx("", "Outros", "-R$ 1,00", "LOJA A"), *tx("", "Outros", "-R$ 2,00", "LOJA B"),
+                    *tx("", "Outros", "-R$ 3,00", "LOJA C"), *tx("", "Outros", "-R$ 4,00", "LOJA D"))
+        p2 = screen(*tx("", "Outros", "-R$ 4,00", "LOJA D"), *tx("Quarta, 22 de jul", "Outros", "-R$ 5,00", "LOJA E"))
+        parts = [(p1, H, True, False, 0), (p2, H, False, False, 700)]
+        with tempfile.TemporaryDirectory() as tmp, mock.patch("fatura_ocr.ocr.read_screens", lambda *a, **k: parts):
+            res = process_images([b"x"], 2026, 8, None, 1500, AliasStore(Path(tmp) / "a.json"))
+        self.assertEqual([(r["data"], r["valor_centavos"], r["revisar"]) for r in res.rows], [
+            ("22/07/2026", 100, True), ("22/07/2026", 200, True), ("22/07/2026", 300, True), ("22/07/2026", 400, True),
+            ("22/07/2026", 500, False)])
+        self.assertTrue(res.stats["reconciliation"]["ok"], res.stats)
+
     def test_end_to_end_with_fake_ocr(self):
         s1 = screen(*tx("Domingo, 23 de ago", "Pagamentos", "-R$ 12,34", "STREAMING ABC"),
                     *tx("Quinta, 20 de ago", "Outros", "-R$ 4,20", "IOFINTERNACIONAL"))

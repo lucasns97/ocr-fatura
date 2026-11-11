@@ -55,8 +55,9 @@ class Parser(unittest.TestCase):
         lines = screen(*tx("", "Saúde", "-R$ 104,45", "CLINICA FICTICIA SAO PAULO BRA", "Parcela 2 de 3"),
                        *tx("", "Drogaria", "+R$ 111,33", "PG FARMACIA EXEMPLO"),
                        *tx("", "Outros", "-R$ 122,91", "REV CR PARC LOJ PARCEL"),
-                       *tx("Quarta, 22 de jul", "Vestuário", "-R$ 80,00", "LOJA DE ROUPA FICTICIA"),
-                       "Pagarcoma ContaInter", "Parcelarfatura")  # como o OCR leu os botões numa captura real
+                       *tx("Quarta, 22 de jul", "Vestuário", "-R$ 80,00", "LOJA DE ROUPA FICTICIA"))
+        # botões fixos no rodapé, na altura e na grafia em que o OCR os leu numa captura real
+        lines += [OcrLine(0.847 * H, "Pagarcoma ContaInter", 0.9), OcrLine(0.909 * H, "Parcelarfatura", 0.9)]
         res = parse_screen(lines, H)
         self.assertEqual([(r.day, r.month, r.amount) for r in res.rows],
                          [(22, 7, 10445), (22, 7, -11133), (22, 7, 12291), (22, 7, 8000)])
@@ -66,6 +67,30 @@ class Parser(unittest.TestCase):
         self.assertEqual(res.rows[0].installment, "2/3")
         # os botões do rodapé não entram no nome do último estabelecimento
         self.assertEqual(res.rows[3].merchant, "LOJA DE ROUPA FICTICIA")
+
+    def test_footer_words_higher_up_are_kept(self):
+        # só a faixa de baixo é rodapé: o mesmo texto no meio da lista não é descartado
+        lines = screen(*tx("Quarta, 22 de jul", "Outros", "-R$ 5,00", "PARCELAR FATURA ANTERIOR"))
+        self.assertEqual(parse_screen(lines, H).rows[0].merchant, "PARCELAR FATURA ANTERIOR")
+
+    def test_unreadable_header_flags_rows_below_it(self):
+        # mês ilegível no 2º título: as linhas abaixo dele ficariam com a data do dia anterior, sem aviso
+        lines = screen(*tx("Sexta, 24 de jul", "Outros", "-R$ 1,00", "LOJA A"),
+                       *tx("Quinta, 23 de jui", "Outros", "-R$ 2,00", "LOJA B"),
+                       *tx("Quarta, 22 de jul", "Outros", "-R$ 3,00", "LOJA C"))
+        rows = parse_screen(lines, H).rows
+        self.assertEqual([(r.day, r.amount) for r in rows], [(24, 100), (24, 200), (22, 300)])
+        self.assertGreater(rows[0].conf, UNSURE_CONF)
+        self.assertLessEqual(rows[1].conf, UNSURE_CONF)
+        self.assertGreater(rows[2].conf, UNSURE_CONF)
+
+    def test_estimate_after_summary_card_has_no_rows_before_first_header(self):
+        lines = screen("Setembro", "Dia de vencimento 07/09", "Despesas da fatura",
+                       *tx("Domingo, 23 de ago", "Outros", "-R$ 1,00", "LOJA A"))
+        res = parse_screen(lines, H, start_date=(30, 8))
+        self.assertEqual([(r.day, r.amount) for r in res.rows], [(23, 100)])
+        self.assertEqual(res.estimated, 0)
+        self.assertGreater(res.rows[0].conf, UNSURE_CONF)
 
     def test_no_date_header_at_all(self):
         res = parse_screen(screen(*tx("", "Outros", "-R$ 10,00", "LOJA A"), *tx("", "Outros", "-R$ 20,00", "LOJA B")), H)

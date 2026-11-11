@@ -117,10 +117,14 @@ def group_lines(boxes: list[tuple[float, float, str, float]], height: float) -> 
 
 def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
                  start_date: tuple[int, int] | None = None, cut_top: bool = True,
-                 cut_bottom: bool = True, start_known: bool = False) -> ScreenResult:
+                 cut_bottom: bool = True, start_known: bool = False,
+                 guess_date: tuple[int, int] | None = None) -> ScreenResult:
     """`start_date`: última data da captura anterior. Linhas no topo desta captura, antes do primeiro
     cabeçalho de data, pertencem a ela (o cabeçalho rolou para fora da tela). A remoção de
-    sobreposição descarta as que já estavam na captura anterior."""
+    sobreposição descarta as que já estavam na captura anterior.
+
+    `guess_date`: sem data anterior, estimativa para as linhas antes do primeiro cabeçalho (escolhida pela
+    imagem inteira: numa captura rolada, o primeiro cabeçalho pode estar num pedaço mais abaixo)."""
     res = ScreenResult()
     for ln in lines:
         m = CARD_MONTH_RE.match(plain(ln.text.strip()))
@@ -129,33 +133,39 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
             break
     # margens com barra de status/navegação; pedaços do meio de uma captura rolada não têm
     lo, hi = (TOP_CUT * height if cut_top else -1), (BOTTOM_CUT * height if cut_bottom else height + 1)
-    body = [ln for ln in lines if lo < ln.y < hi and not FOOTER_RE.match(re.sub(r"\s+", "", plain(ln.text)))]
+    # botões do rodapé: só na parte de baixo da tela (a lista rola por baixo deles)
+    body = [ln for ln in lines if lo < ln.y < hi
+            and not (ln.y > 0.75 * height and FOOTER_RE.match(re.sub(r"\s+", "", plain(ln.text))))]
     card = [i for i, ln in enumerate(body) if CARD_RE.search(plain(ln.text))]
     if card:
         # captura do topo da lista: o cartão-resumo não é transação, e nada aqui herda a data anterior
         body = body[card[-1] + 1:]
         start_date = None
     date = start_date
-    saw_header = False
+    date_ok = start_known  # a data atual veio de um cabeçalho lido nesta imagem?
+    any_header = False      # já passou por um cabeçalho válido nesta tela
     guessing = False
     if date is None:
         # primeira captura começando no meio de um dia: o cabeçalho dele ficou acima da tela. A lista vai
         # da compra mais nova para a mais antiga, então a data real é a do primeiro cabeçalho visível
-        # ou posterior: usamos esse dia como estimativa e a linha sai marcada "revisar" (sem cabeçalho visto)
-        for ln in body:
+        # ou posterior: usamos esse dia como estimativa e a linha sai marcada "revisar"
+        date = guess_date
+        for ln in body if date is None else []:
             d = DATE_RE.match(ln.text.strip())
             if d and MONTHS.get(plain(d.group(3))):
-                date, guessing = (int(d.group(2)), MONTHS[plain(d.group(3))]), True
+                date = (int(d.group(2)), MONTHS[plain(d.group(3))])
                 break
+        guessing = date is not None
     for i, ln in enumerate(body):
         text = ln.text.strip()
         d = DATE_RE.match(text)
         if d:
             mon = MONTHS.get(plain(d.group(3)))
-            date = (int(d.group(2)), mon) if mon else date
             if mon:
+                date = (int(d.group(2)), mon)
                 res.headers.append((ln.y, date))
-            saw_header = True
+                any_header = True
+            date_ok = bool(mon)  # cabeçalho ilegível: as linhas abaixo ficam com uma data que não é a delas
             continue
         a = AMOUNT_RE.search(text)
         if a and date is None and i > 0:
@@ -170,8 +180,10 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
         # categoria = linha logo acima do valor; se ali estiver a data ou outro valor, ela foi cortada
         category = "" if DATE_RE.match(above) or AMOUNT_RE.search(above) else restore_category(above)
         conf = min(ln.conf, body[i - 1].conf)
-        if a.group(1) is None or not (saw_header or start_known):
-            conf = min(conf, UNSURE_CONF)  # sinal não lido (pode ser pagamento) ou data herdada da captura anterior
+        if a.group(1) is None or not date_ok:
+            # sinal não lido (pode ser pagamento), data herdada da captura anterior, estimada ou de um
+            # cabeçalho ilegível
+            conf = min(conf, UNSURE_CONF)
         merchant, installment = [], ""
         for nxt_i in range(i + 1, len(body)):
             t = body[nxt_i].text.strip()
@@ -184,7 +196,7 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
             else:
                 merchant.append(t)
                 conf = min(conf, body[nxt_i].conf)
-        if guessing and not saw_header:
+        if guessing and not any_header:
             res.estimated += 1
         res.rows.append(RawRow(date[0], date[1], category, amount, re.sub(r"\s+", " ", " ".join(merchant)).strip(),
                                installment, conf, screen))
