@@ -97,7 +97,11 @@ function Install-FaturaOcr {
     $shell = New-Object -ComObject WScript.Shell
     foreach ($dir in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
         if (-not $dir) { continue }
-        $lnk = $shell.CreateShortcut((Join-Path $dir 'Fatura OCR.lnk'))
+        $lnkPath = Join-Path $dir 'Fatura OCR.lnk'
+        # apaga e cria de novo: sobrescrever o mesmo arquivo nao faz a Area de Trabalho redesenhar o icone
+        # (o Menu Iniciar redesenhava; a Area de Trabalho mantinha o antigo ate o atalho ser apagado)
+        if (Test-Path $lnkPath) { Remove-Item -Path $lnkPath -Force }
+        $lnk = $shell.CreateShortcut($lnkPath)
         $lnk.TargetPath = Join-Path $Dest 'iniciar.cmd'
         $lnk.WorkingDirectory = $Dest
         $lnk.IconLocation = $icoLnk + ',0'
@@ -108,6 +112,11 @@ function Install-FaturaOcr {
     # pede ao Windows para redesenhar os icones (Windows 10/11); se nao existir, o icone novo aparece depois
     $ie4 = Join-Path $env:SystemRoot 'System32\ie4uinit.exe'
     if (Test-Path $ie4) { try { & $ie4 -show; $global:LASTEXITCODE = 0 } catch { } }
+    # e avisa o Explorer que icones mudaram (SHCNE_ASSOCCHANGED): a Area de Trabalho redesenha os atalhos
+    try {
+        Add-Type -Namespace FaturaOcr -Name Shell -MemberDefinition '[DllImport("shell32.dll")] public static extern void SHChangeNotify(int e, uint f, IntPtr a, IntPtr b);'
+        [FaturaOcr.Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+    } catch { }
 
     Write-Host ''
     Write-Host 'Pronto! Para abrir, use o atalho "Fatura OCR" na Area de Trabalho ou no Menu Iniciar.' -ForegroundColor Green
