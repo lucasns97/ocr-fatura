@@ -220,6 +220,11 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .hbar .fl { height: 10px; background: var(--series-1); border-radius: 5px; min-width: 3px; }
 .hbar .vl { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
 .hbar.rest .fl { background: var(--text-3); }
+/* pagamentos/devoluções nos gráficos: abaixo de um divisor, menos destaque, verde = abate da fatura */
+.hsep { margin: 14px 0 6px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 12px; font-weight: 600; color: var(--ok); }
+.hbar.credit .nm { color: var(--text-3); }
+.hbar.credit .fl { background: var(--ok); opacity: .55; }
+.hbar.credit .vl { color: var(--ok); }
 .legend { display: flex; gap: 16px; font-size: 13px; color: var(--text-2); margin-top: 10px; flex-wrap: wrap; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
 .stack { display: flex; height: 16px; gap: 2px; border-radius: 6px; overflow: hidden; }

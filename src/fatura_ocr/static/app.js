@@ -252,6 +252,10 @@ function renderRecon() {
   };
   const rec = reconcile(S.rows);
   const toReview = S.rows.filter((r) => r.revisar).length;
+  // um só aviso amarelo, um item por problema: avisos da leitura + linhas marcadas para revisar
+  const items = [...(S.warnings || [])];
+  if (toReview) items.push(`${pl(toReview, "linha marcada", "linhas marcadas")} com ⚠ revisar (em amarelo). Depois de conferir, clique na marca da linha.`);
+  if (items.length) add("warn", "⚠ Confira antes de copiar", items);
   if (rec) {
     const misread = "Algum valor pode ter sido lido errado" + (toReview ? ": comece pelas linhas marcadas com ⚠ revisar." : ".");
     const sums = `Soma das compras na tabela: ${fmt(rec.charges)} · total da fatura: ${fmt(rec.total)}.`;
@@ -267,10 +271,6 @@ function renderRecon() {
         ["Talvez falte uma captura: confira se pegou da primeira à última compra da fatura.", misread, advLi, sums]);
     }
   }
-  // um só aviso amarelo, um item por problema: avisos da leitura + linhas marcadas para revisar
-  const items = [...(S.warnings || [])];
-  if (toReview) items.push(`${pl(toReview, "linha marcada", "linhas marcadas")} com ⚠ revisar (em amarelo). Depois de conferir, clique na marca da linha.`);
-  if (items.length) add("warn", "⚠ Confira antes de copiar", items);
 }
 
 /* passos 1 e 2 recolhidos depois da leitura, com um resumo do que foi usado */
@@ -483,12 +483,17 @@ function sumBy(rows, keyFn) {
   const m = new Map(); rows.forEach((r) => m.set(keyFn(r), (m.get(keyFn(r)) || 0) + r.valor_centavos));
   return [...m].sort((a, b) => b[1] - a[1]);
 }
-function hbars(title, pairs, max = 8) {
+// credits: pagamentos/devoluções (valores positivos, já em módulo), mostrados abaixo de um divisor, em verde
+// e com escala própria (o pagamento da fatura anterior achataria as barras de compras)
+function hbars(title, pairs, max = 8, credits = []) {
   let list = pairs.slice(0, max);
   if (pairs.length > max) list = pairs.slice(0, max - 1).concat([["Demais", pairs.slice(max - 1).reduce((s, p) => s + p[1], 0)]]);
   const top = Math.max(...list.map((p) => p[1]), 1);
   const body = list.map(([k, v]) => `<div class="hbar${k === "Demais" && pairs.length > max ? " rest" : ""}"><span class="nm" title="${esc(k)}">${esc(k)}</span><span class="tr"><span class="fl" style="display:block;width:${(v / top * 100).toFixed(1)}%" data-tip="${esc(k)}: ${fmt(v)}" tabindex="0"></span></span><span class="vl">${fmt(v)}</span></div>`).join("");
-  return `<div class="card chart w2"><h3>${esc(title)}</h3>${body || '<p class="muted">Sem dados.</p>'}</div>`;
+  const ctop = Math.max(...credits.map((p) => p[1]), 1);
+  const cred = credits.slice(0, max).map(([k, v]) => `<div class="hbar credit"><span class="nm" title="${esc(k)}">${esc(k)}</span><span class="tr"><span class="fl" style="display:block;width:${(v / ctop * 100).toFixed(1)}%" data-tip="${esc(k)}: -${fmt(v)} (abate da fatura)" tabindex="0"></span></span><span class="vl">-${fmt(v)}</span></div>`).join("");
+  const credBlock = cred ? `<div class="hsep">↩ Pagamentos e devoluções</div>${cred}` : "";
+  return `<div class="card chart w2"><h3>${esc(title)}</h3>${body || '<p class="muted">Sem compras.</p>'}${credBlock}</div>`;
 }
 function monthColumns(rows) {
   const m = new Map();
@@ -534,6 +539,6 @@ function renderSummary() {
     <div class="kpi"><div class="l">Maior compra</div><div class="v">${big ? fmt(big.valor_centavos) : "–"}</div><div class="s">${big ? esc(big.lancamento) : ""}</div></div>
     <div class="kpi credit" title="Valores que abatem da fatura: o pagamento da fatura anterior e compras devolvidas"><div class="l">↩ Pagamentos e devoluções</div><div class="v">${fmt(cr)}</div><div class="s">${pl(credits.length, "lançamento", "lançamentos")} · abatem da fatura</div></div>
     <div class="kpi${toReview ? " warn" : ""}"><div class="l">${toReview ? "⚠ " : "✓ "}Para revisar</div><div class="v">${toReview}</div><div class="s">${toReview ? "leitura incerta: confira na Tabela" : "nenhuma leitura incerta"}</div></div>
-    ${hbars("Gasto por categoria", sumBy(spend, (r) => r.categoria || "SEM CATEGORIA"))}${hbars("Onde você mais gastou", sumBy(spend, (r) => r.lancamento || "(sem nome)"), 6)}${monthColumns(spend)}</div>
-    <p class="muted small">Os gráficos usam as linhas da tabela (já com suas edições salvas). Pagamentos e devoluções ficam fora dos gráficos.</p>`;
+    ${hbars("Gasto por categoria", sumBy(spend, (r) => r.categoria || "SEM CATEGORIA"), 8, sumBy(credits, (r) => r.categoria || "SEM CATEGORIA").map(([k, v]) => [k, -v]).reverse())}${hbars("Onde você mais gastou", sumBy(spend, (r) => r.lancamento || "(sem nome)"), 6, sumBy(credits, (r) => r.lancamento || "(sem nome)").map(([k, v]) => [k, -v]).reverse())}${monthColumns(spend)}</div>
+    <p class="muted small">Os gráficos usam as linhas da tabela (já com suas edições salvas). Pagamentos e devoluções aparecem separados, em verde, abaixo das compras; não entram no total de compras.</p>`;
 }
