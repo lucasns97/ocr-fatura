@@ -53,7 +53,11 @@ function Install-FaturaOcr {
         $zip = Join-Path $tmp 'app.zip'
         # a versao mais recente publicada (o CI publica uma a cada mudanca aprovada); o atalho compara
         # com ela para oferecer atualizacao. Sem versao publicada (ou sem acesso a API), baixa o main.
-        try { $ver = (Invoke-RestMethod -UseBasicParsing -TimeoutSec 20 -Uri "https://api.github.com/repos/$Repo/releases/latest").tag_name } catch { $ver = $null }
+        # o atalho passa a versao que ofereceu ao usuario (instala exatamente essa)
+        if ($env:FATURA_OCR_TAG -cmatch '^v\d+\.\d+\.\d+$') { $ver = $env:FATURA_OCR_TAG } else {
+            try { $ver = (Invoke-RestMethod -UseBasicParsing -TimeoutSec 20 -Uri "https://api.github.com/repos/$Repo/releases/latest").tag_name } catch { $ver = $null }
+            if ($ver -cnotmatch '^v\d+\.\d+\.\d+$') { $ver = $null }
+        }
         $ref = if ($ver) { "refs/tags/$ver" } else { 'refs/heads/main' }
         if ($ver) { Write-Host "Versao $ver" }
         Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$Repo/archive/$ref.zip" -OutFile $zip

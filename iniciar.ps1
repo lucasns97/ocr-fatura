@@ -22,22 +22,37 @@ if (-not $env:CI -and -not $env:FATURA_OCR_NO_UPDATE) {
     } catch { }
     $vf = Join-Path $PSScriptRoot 'VERSION'
     $mine = if (Test-Path $vf) { (Get-Content -Raw $vf).Trim() } else { '' }
-    if ($latest -and $latest -ne $mine) {
+    if ($latest -cnotmatch '^v\d+\.\d+\.\d+$') { $latest = $null }
+    $open = Get-Process python, pythonw -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$PSScriptRoot\*" }
+    if ($latest -and $latest -ne $mine -and $open) {
+        # ja esta aberto em outra janela: o instalador nao pode trocar os arquivos agora
+        Write-Host ''
+        Write-Host "Ha uma versao nova do Fatura OCR ($latest). Para atualizar, feche o Fatura OCR que ja esta aberto e abra o atalho de novo." -ForegroundColor Yellow
+    } elseif ($latest -and $latest -ne $mine) {
         Write-Host ''
         $have = if ($mine) { "instalada: $mine" } else { 'versao instalada desconhecida' }
         Write-Host "Ha uma versao nova do Fatura OCR: $latest ($have)." -ForegroundColor Yellow
-        $answer = Read-Host 'Atualizar agora? Leva cerca de 1 minuto. [S/n]'
+        # FATURA_OCR_ASSUME_UPDATE=1: responde "sim" sozinho (teste automatico no CI)
+        $answer = if ($env:FATURA_OCR_ASSUME_UPDATE) { 's' } else { Read-Host 'Atualizar agora? Costuma levar 1 a 2 minutos. [S/n]' }
         if ($answer -notmatch '^[nN]') {
             # o instalador troca os arquivos desta pasta; este script ja esta na memoria e segue depois
             $env:FATURA_OCR_UPDATING = '1'
+            $env:FATURA_OCR_TAG = $latest   # instala exatamente a versao oferecida
             & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'instalar.ps1')
-            Remove-Item Env:FATURA_OCR_UPDATING -ErrorAction SilentlyContinue
+            Remove-Item Env:FATURA_OCR_UPDATING, Env:FATURA_OCR_TAG -ErrorAction SilentlyContinue
             $now = if (Test-Path $vf) { (Get-Content -Raw $vf).Trim() } else { '' }
-            if ($now -eq $latest) {
-                Write-Host 'Atualizado! Abrindo a versao nova...' -ForegroundColor Green
+            $whole = (Test-Path (Join-Path $PSScriptRoot 'pyproject.toml')) -and (Test-Path (Join-Path $PSScriptRoot 'iniciar.cmd'))
+            if (-not $whole) {
+                # parou depois de apagar os arquivos antigos: nao ha versao para abrir
+                Write-Host 'A atualizacao parou no meio e o programa ficou incompleto.' -ForegroundColor Red
+                Write-Host 'Para reinstalar, rode de novo o comando de instalacao do README (item A).'
+                Read-Host 'Aperte Enter para fechar'
+                return
+            } elseif ($now -eq $latest) {
+                Write-Host "Atualizado para $latest! Abrindo a versao nova..." -ForegroundColor Green
             } else {
                 Write-Host 'A atualizacao nao terminou (veja a mensagem acima). Vamos abrir a versao instalada.' -ForegroundColor Yellow
-                Write-Host 'Para tentar de novo: feche esta janela e abra o atalho de novo, ou rode o instalar.cmd.'
+                Write-Host 'Para tentar de novo: feche esta janela e abra o atalho de novo.'
             }
         } else {
             Write-Host 'Ok, abrindo a versao instalada. Para atualizar depois, e so abrir o atalho de novo.'
