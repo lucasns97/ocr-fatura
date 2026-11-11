@@ -226,7 +226,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .legend.lead { font-size: 12px; }
 .chart .legend.lead { margin: -4px 0 8px; }
 .hbar .vl { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
-.hbar.rest .fl > i { background: var(--text-3); }
+.hbar.rest .fl { opacity: .55; }  /* "Demais": mesmas cores (novas × antigas), com menos destaque */
 /* pagamentos/devoluções nos gráficos: abaixo de um divisor, menos destaque, verde = abate da fatura */
 .hsep { margin: 14px 0 6px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 12px; font-weight: 600; color: var(--ok); }
 .hbar.credit .nm { color: var(--text-3); }
