@@ -83,6 +83,7 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
 ## Atualizar e desinstalar
 
 - **Atualizar:** rode o instalador de novo (o comando do item A, ou `instalar.cmd` na pasta do programa). Feche o Fatura OCR antes.
+  Se o ícone do atalho mudou numa versão nova e ainda aparece o antigo, saia e entre de novo no Windows (ou reinicie).
 - **Desinstalar:** dois cliques em `desinstalar.cmd` (na pasta `%LOCALAPPDATA%\FaturaOCR`). Os nomes corrigidos ficam em
   `%USERPROFILE%\.fatura-ocr`; apague essa pasta se quiser removê-los também.
   O uv e o Python que ele baixou continuam no computador; para removê-los, rode no PowerShell

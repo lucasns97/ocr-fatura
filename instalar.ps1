@@ -71,17 +71,27 @@ function Install-FaturaOcr {
 
     # 4. atalhos
     Step 'Criando os atalhos'
+    # O Windows guarda o icone em cache pelo caminho do arquivo: com o mesmo caminho, um icone novo
+    # continuava aparecendo o antigo (mesmo apagando o atalho). O nome leva um pedaco do hash do
+    # conteudo, entao um icone novo tem um caminho novo.
+    $ico = Join-Path $Dest 'assets\fatura.ico'
+    $icoTag = (Get-FileHash -Algorithm SHA256 -Path $ico).Hash.Substring(0, 8).ToLower()
+    $icoLnk = Join-Path $Dest "assets\fatura-$icoTag.ico"
+    Copy-Item -Path $ico -Destination $icoLnk -Force
     $shell = New-Object -ComObject WScript.Shell
     foreach ($dir in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
         if (-not $dir) { continue }
         $lnk = $shell.CreateShortcut((Join-Path $dir 'Fatura OCR.lnk'))
         $lnk.TargetPath = Join-Path $Dest 'iniciar.cmd'
         $lnk.WorkingDirectory = $Dest
-        $lnk.IconLocation = (Join-Path $Dest 'assets\fatura.ico') + ',0'
+        $lnk.IconLocation = $icoLnk + ',0'
         $lnk.Description = 'Fatura OCR: capturas da fatura para CSV'
         $lnk.Save()
         Write-Host "Atalho criado em $dir"
     }
+    # pede ao Windows para redesenhar os icones (Windows 10/11); se nao existir, o icone novo aparece depois
+    $ie4 = Join-Path $env:SystemRoot 'System32\ie4uinit.exe'
+    if (Test-Path $ie4) { try { & $ie4 -show } catch { } }
 
     Write-Host ''
     Write-Host 'Pronto! Para abrir, use o atalho "Fatura OCR" na Area de Trabalho ou no Menu Iniciar.' -ForegroundColor Green

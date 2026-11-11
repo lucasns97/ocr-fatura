@@ -56,6 +56,9 @@ jobs:
           }
           $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Fatura OCR.lnk'
           if (-not (Test-Path $lnk)) { throw 'desktop shortcut missing' }
+          # icone versionado pelo conteudo (o cache de icones do Windows e por caminho)
+          $icon = ((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).IconLocation -split ',')[0]
+          if ($icon -notmatch 'fatura-[0-9a-f]{8}\.ico$' -or -not (Test-Path $icon)) { throw "shortcut icon not versioned: $icon" }
           $mb = (Get-ChildItem $app -Recurse -Force -File | Measure-Object Length -Sum).Sum / 1MB
           Write-Host ('Installed size: {0:N0} MB' -f $mb)
       - name: Install via "irm | iex" and update in place (downloads main, so not on PRs)
