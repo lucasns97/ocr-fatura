@@ -225,7 +225,6 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .hbar .fl > i + i { box-shadow: inset 2px 0 0 var(--solid); }
 .hbar .fl > i.sg-n { background: var(--series-1); }   /* compras novas */
 .hbar .fl > i.sg-o { background: var(--series-2); }   /* parcelas de compras antigas */
-.hbar .fl > i.sg-rest { background: var(--text-3); } /* "Demais" */
 .hbar .fl > i.sg-c { background: var(--ok); }        /* pagamentos/devoluções */
 .hbar:hover, .hbar:focus-visible { background: var(--surface-2); border-radius: 8px; }
 .hbar .nm .pt { color: var(--text-3); font-size: 11px; margin-left: 4px; }

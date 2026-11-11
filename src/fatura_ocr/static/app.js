@@ -503,13 +503,13 @@ function hbars(title, rows, keyFn, max = 8, credits = [], tag = false) {
   }
   const top = Math.max(...list.map((e) => e.t), 1);
   const anyOld = list.some((e) => e.old > 0);
-  // uma barra por linha, dividida em azul (compras novas) e laranja (parcelas antigas); "Demais" cinza.
+  // uma barra por linha, dividida em azul (compras novas) e laranja (parcelas antigas), "Demais" inclusive.
   // Os valores de cada parte aparecem ao passar o mouse (ou com foco do teclado).
   const body = list.map((e) => {
     const lab = tag && e.rows.length === 1 && isOld(e.rows[0]) ? ` <small class="pt">${esc(e.rows[0].tipo.toLowerCase())}</small>` : "";
     const tip = `${e.k}: ${fmt(e.t)}` + (e.rest || (e.neu && e.old) ? ` · compras novas ${fmt(e.neu)} · parcelas antigas ${fmt(e.old)}`
       : e.old ? " · parcelas de compras antigas" : "");
-    const segs = e.rest ? `<i class="sg-rest"></i>` : (e.neu ? `<i class="sg-n" style="flex-grow:${e.neu}"></i>` : "") + (e.old ? `<i class="sg-o" style="flex-grow:${e.old}"></i>` : "");
+    const segs = (e.neu ? `<i class="sg-n" style="flex-grow:${e.neu}"></i>` : "") + (e.old ? `<i class="sg-o" style="flex-grow:${e.old}"></i>` : "");
     return `<div class="hbar" data-tip="${esc(tip)}" tabindex="0"><span class="nm" title="${esc(e.k)}">${esc(e.k)}${lab}</span><span class="tr"><span class="fl" style="width:${(e.t / top * 100).toFixed(1)}%">${segs}</span></span><span class="vl">${fmt(e.t)}</span></div>`;
   }).join("");
   const legend = anyOld ? `<div class="legend lead"><span><i style="background:var(--series-1)"></i>Compras novas</span><span><i style="background:var(--series-2)"></i>Parcelas de compras antigas</span></div>` : "";
