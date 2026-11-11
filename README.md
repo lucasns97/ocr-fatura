@@ -55,12 +55,18 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
    1. **Dados da fatura**: confira o mês da fatura (o mês do **vencimento**). Já vem preenchido com o
       **próximo mês**, que é o da fatura em aberto; mude se estiver lendo uma fatura já fechada.
       O app mostra só "23 de ago", sem o ano; é esse mês que permite completar a data.
-      Se quiser, informe o **total da fatura**: o programa confere se a soma bate.
+      Informe também o **total da fatura** (recomendado; é o valor grande no topo da tela Faturas): o programa
+      confere se a soma bate e avisa se faltar alguma compra.
    2. **Capturas de tela**: arraste as imagens (ou clique para escolher). Confira a ordem (de cima para baixo) e use ↑ ↓ se precisar.
    3. Clique em **Ler capturas** (cerca de 1 segundo por imagem).
-4. Depois da leitura, as seções 1 e 2 se recolhem (clique no título para abrir de novo). Confira a **Tabela**. Linhas marcadas com **revisar** tiveram leitura incerta.
-   Para corrigir, edite as células e clique em **Salvar alterações**. Aparece o aviso
-   **"Editado manualmente"**, e **Voltar à leitura automática** desfaz tudo.
+4. Depois da leitura, as seções 1 e 2 se recolhem (clique no título para abrir de novo). Confira a **Tabela**.
+   As cores têm sempre o mesmo significado:
+   - **✓ verde**: a soma bate com o total da fatura. **⚠ vermelho**: não bate (o aviso diz quanto falta ou sobra e o que conferir);
+   - **⚠ revisar** (amarelo): leitura incerta, confira a linha; depois clique na marca (dá para desfazer);
+   - **↩ pagamento** (verde, valor negativo): pagamento ou devolução, que abate da fatura;
+   - **azul**: célula alterada que ainda não foi salva.
+   Para corrigir, edite as células e clique em **Salvar alterações** (Copiar e Salvar CSV também salvam antes).
+   Aparece o aviso **"Você corrigiu N itens"**, e **Desfazer todas as correções** volta à leitura automática.
    Nomes de estabelecimentos corrigidos são lembrados nas próximas faturas (dá para desligar).
 5. Ainda na **Tabela**:
    - **Copiar para planilha**: no Google Sheets ou no Excel, clique em uma célula e cole (Ctrl+V); cada coluna vai
@@ -89,7 +95,7 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
   para as próximas vezes.
 - A data é a que o app mostra. Em casos raros ela difere da fatura em PDF (ex.: compra listada em 31/07 no app e em 01/08 no PDF).
 - O ano é deduzido: a compra não pode ser depois do fechamento da fatura (por padrão, o último dia do mês anterior ao
-  vencimento; dá para mudar em **Avançado**). Em parcelas, o número da parcela ajuda a achar o ano da compra original.
+  vencimento; dá para mudar em **Opções avançadas**). Em parcelas, o número da parcela ajuda a achar o ano da compra original.
 - Pagamentos de fatura e estornos (valores com **+** no app) saem **negativos**; compras saem positivas.
 
 ## Em outros sistemas (macOS / Linux)

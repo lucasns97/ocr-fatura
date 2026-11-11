@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fatura OCR</title>
+<link rel="icon" type="image/svg+xml" href="/static/icon.svg">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body data-token="__TOKEN__" data-year="__DEFAULT_YEAR__" data-month="__DEFAULT_MONTH__">
 <header class="top">
-  <div class="brand"><span class="logo" aria-hidden="true">R$</span><h1>Fatura OCR</h1></div>
+  <div class="brand"><img class="logo" src="/static/icon.svg" alt="" width="38" height="38"><h1>Fatura OCR</h1></div>
   <span class="pill" title="O programa roda só neste computador">Roda localmente · nada sai do seu computador</span>
 </header>
 
@@ -16,19 +17,20 @@
   <details class="card step" id="step-form" open>
     <summary><h2><span class="n">1</span> Dados da fatura</h2><span class="sum" id="sum-form"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
     <div class="grid">
-      <label><span>Mês da fatura (vencimento)</span>
+      <label><span>Mês de vencimento</span>
         <span class="row">
           <select id="mes" aria-label="Mês"></select>
           <input id="ano" type="number" min="2000" max="2100" aria-label="Ano">
         </span>
+        <small>Para a fatura em aberto, normalmente é o próximo mês.</small>
       </label>
-      <label><span>Total da fatura <em>(opcional)</em></span>
+      <label><span>Total da fatura <em>(recomendado)</em></span>
         <input id="total" type="text" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off">
-        <small>Se informar, conferimos se a soma bate e avisamos se faltar algo.</small>
+        <small>O valor grande no topo da tela Faturas do app. Com ele, conferimos se nenhuma compra ficou de fora.</small>
       </label>
     </div>
     <details class="adv">
-      <summary>Avançado</summary>
+      <summary>Opções avançadas <em class="muted">(raramente necessário)</em></summary>
       <label>Último dia de compras da fatura (fechamento)
         <input id="fechamento" type="date">
         <small>Define o ano de cada compra: o app mostra só "23 de ago". Vazio = último dia do mês anterior ao vencimento.</small>
@@ -46,7 +48,7 @@
     <ol id="files" class="files"></ol>
     <div class="actions">
       <button id="go" class="primary" disabled>Ler capturas</button>
-      <span id="status" class="muted" role="status"></span>
+      <span id="status" class="muted" role="status">Escolha as capturas para continuar.</span>
     </div>
   </details>
 
@@ -62,12 +64,13 @@
     </div>
 
     <div id="tab-tabela" class="card tabpanel">
+      <div id="strip" class="strip" role="group" aria-label="Números da tabela"></div>
       <div class="toolbar">
         <button id="add">+ Linha</button>
-        <button id="save" class="primary" disabled>Salvar alterações</button>
-        <button id="reset" class="ghost" hidden>Voltar à leitura automática</button>
+        <button id="save" disabled>Salvar alterações</button>
+        <button id="reset" class="ghost" hidden>Desfazer todas as correções</button>
         <span class="spacer"></span>
-        <button id="copy" class="icon" title="Copia como tabela: cola em colunas no Google Sheets e no Excel">
+        <button id="copy" class="icon primary" title="Copia como tabela: cola em colunas no Google Sheets e no Excel">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Copiar para planilha</button>
         <button id="savecsv" class="icon" title="Salva o arquivo fatura-inter-AAAA-MM.csv">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Salvar CSV</button>
@@ -78,12 +81,12 @@
       </div>
       <div class="scroll">
         <table id="grid">
-          <colgroup><col style="width:120px"><col><col style="width:160px"><col style="width:160px"><col style="width:130px"><col style="width:96px"></colgroup>
+          <colgroup><col style="width:120px"><col><col style="width:160px"><col style="width:160px"><col style="width:130px"><col style="width:140px"></colgroup>
           <thead><tr><th>Data</th><th>Lançamento</th><th>Categoria</th><th>Tipo</th><th class="num">Valor</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
-      <p class="muted small">Linhas marcadas com <span class="chip warn">revisar</span> tiveram leitura incerta. Pagamentos e estornos têm sinal oposto ao das compras.</p>
+      <p class="legend-line small"><span><span class="chip warn">⚠ revisar</span> leitura incerta: confira</span><span><span class="chip ok">↩ pagamento</span> pagamento ou devolução (valor negativo, abate da fatura)</span><span><span class="sw dirty"></span> alterado, falta salvar</span></p>
     </div>
 
     <div id="tab-resumo" class="tabpanel" hidden></div>
