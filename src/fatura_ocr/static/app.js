@@ -503,16 +503,18 @@ function hbars(title, rows, keyFn, max = 8, credits = [], tag = false) {
   }
   const top = Math.max(...list.map((e) => e.t), 1);
   const anyOld = list.some((e) => e.old > 0);
+  // uma barra por linha, dividida em azul (compras novas) e laranja (parcelas antigas); "Demais" cinza.
+  // Os valores de cada parte aparecem ao passar o mouse (ou com foco do teclado).
   const body = list.map((e) => {
-    // estabelecimento com uma só parcela antiga: mostra qual ("parcela 2 de 3"; nunca "2/3", que parece data)
     const lab = tag && e.rows.length === 1 && isOld(e.rows[0]) ? ` <small class="pt">${esc(e.rows[0].tipo.toLowerCase())}</small>` : "";
-    const tip = `${e.k}: ${fmt(e.t)}` + (e.old ? ` (compras novas ${fmt(e.neu)} · parcelas antigas ${fmt(e.old)})` : "");
-    return `<div class="hbar${e.rest ? " rest" : ""}"><span class="nm" title="${esc(e.k)}">${esc(e.k)}${lab}</span><span class="tr"><span class="fl" style="width:${(e.t / top * 100).toFixed(1)}%" data-tip="${esc(tip)}" tabindex="0">`
-      + (e.neu ? `<i class="n" style="flex:${e.neu}"></i>` : "") + (e.old ? `<i class="o" style="flex:${e.old}"></i>` : "") + `</span></span><span class="vl">${fmt(e.t)}</span></div>`;
+    const tip = `${e.k}: ${fmt(e.t)}` + (e.rest || (e.neu && e.old) ? ` · compras novas ${fmt(e.neu)} · parcelas antigas ${fmt(e.old)}`
+      : e.old ? " · parcelas de compras antigas" : "");
+    const segs = e.rest ? `<i class="sg-rest"></i>` : (e.neu ? `<i class="sg-n" style="flex-grow:${e.neu}"></i>` : "") + (e.old ? `<i class="sg-o" style="flex-grow:${e.old}"></i>` : "");
+    return `<div class="hbar" data-tip="${esc(tip)}" tabindex="0"><span class="nm" title="${esc(e.k)}">${esc(e.k)}${lab}</span><span class="tr"><span class="fl" style="width:${(e.t / top * 100).toFixed(1)}%">${segs}</span></span><span class="vl">${fmt(e.t)}</span></div>`;
   }).join("");
   const legend = anyOld ? `<div class="legend lead"><span><i style="background:var(--series-1)"></i>Compras novas</span><span><i style="background:var(--series-2)"></i>Parcelas de compras antigas</span></div>` : "";
   const ctop = Math.max(...credits.map((p) => p[1]), 1);
-  const cred = credits.slice(0, max).map(([k, v]) => `<div class="hbar credit"><span class="nm" title="${esc(k)}">${esc(k)}</span><span class="tr"><span class="fl" style="width:${(v / ctop * 100).toFixed(1)}%" data-tip="${esc(k)}: -${fmt(v)} (abate da fatura)" tabindex="0"><i class="c"></i></span></span><span class="vl">-${fmt(v)}</span></div>`).join("");
+  const cred = credits.slice(0, max).map(([k, v]) => `<div class="hbar credit" data-tip="${esc(k)}: -${fmt(v)} (abate da fatura)" tabindex="0"><span class="nm" title="${esc(k)}">${esc(k)}</span><span class="tr"><span class="fl" style="width:${(v / ctop * 100).toFixed(1)}%"><i class="sg-c"></i></span></span><span class="vl">-${fmt(v)}</span></div>`).join("");
   const credBlock = cred ? `<div class="hsep">↩ Pagamentos e devoluções</div>${cred}` : "";
   return `<div class="card chart w2"><h3>${esc(title)}</h3>${legend}${body || '<p class="muted">Sem compras.</p>'}${credBlock}</div>`;
 }

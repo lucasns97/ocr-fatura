@@ -214,19 +214,24 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .kpi.warn { background: color-mix(in srgb, var(--warn-bg) 80%, transparent); }
 .kpi.warn .l, .kpi.warn .v { color: var(--warn-ink); }
 .chart h3 { margin: 0 0 12px; font-size: 14px; }
-.hbar { display: grid; grid-template-columns: minmax(70px, 140px) 1fr 96px; gap: 10px; align-items: center; margin: 7px 0; font-size: 13px; }
+.hbar { display: grid; grid-template-columns: minmax(70px, 140px) 1fr 96px; gap: 10px; align-items: center; margin: 2px -6px; padding: 4px 6px; font-size: 13px; }
 .hbar .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
 .hbar .tr { height: 10px; background: var(--surface-2); border-radius: 5px; }
-.hbar .fl { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; min-width: 3px; }
-.hbar .fl > i { display: block; height: 100%; min-width: 2px; }
-.hbar .fl > i.n { background: var(--series-1); }   /* compras novas */
-.hbar .fl > i.o { background: var(--series-2); }   /* parcelas de compras antigas */
-.hbar .fl > i.c { flex: 1; background: var(--ok); } /* pagamentos/devoluções */
+/* classes sg-* (não .n/.o: .n já é o número dos passos 1 e 2)
+   barra dividida: pedaços lado a lado (sem vão), cantos arredondados só nas pontas de fora da barra,
+   divisor fino da cor do cartão entre azul e laranja; cada pedaço tem largura mínima (nada vira fiapo) */
+.hbar .fl { display: flex; height: 10px; min-width: 10px; border-radius: 5px; overflow: hidden; }
+.hbar .fl > i { display: block; flex: 1 1 0; min-width: 6px; }
+.hbar .fl > i + i { box-shadow: inset 2px 0 0 var(--solid); }
+.hbar .fl > i.sg-n { background: var(--series-1); }   /* compras novas */
+.hbar .fl > i.sg-o { background: var(--series-2); }   /* parcelas de compras antigas */
+.hbar .fl > i.sg-rest { background: var(--text-3); } /* "Demais" */
+.hbar .fl > i.sg-c { background: var(--ok); }        /* pagamentos/devoluções */
+.hbar:hover, .hbar:focus-visible { background: var(--surface-2); border-radius: 8px; }
 .hbar .nm .pt { color: var(--text-3); font-size: 11px; margin-left: 4px; }
 .legend.lead { font-size: 12px; }
 .chart .legend.lead { margin: -4px 0 8px; }
 .hbar .vl { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
-.hbar.rest .fl { opacity: .55; }  /* "Demais": mesmas cores (novas × antigas), com menos destaque */
 /* pagamentos/devoluções nos gráficos: abaixo de um divisor, menos destaque, verde = abate da fatura */
 .hsep { margin: 14px 0 6px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 12px; font-weight: 600; color: var(--ok); }
 .hbar.credit .nm { color: var(--text-3); }
@@ -241,7 +246,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .cols line { stroke: var(--grid); }
 .cols rect { fill: var(--series-1); }
 .cols text.val { fill: var(--text-2); font-size: 10px; }
-.cols rect:hover, .hbar .fl:hover { filter: brightness(1.15); }
+.cols rect:hover { filter: brightness(1.15); }
 /* celular: Tipo e Categoria saem da tela; Data, Lançamento e Valor cabem sem rolar para o lado */
 @media (max-width: 640px) {
   #grid { min-width: 520px; }
