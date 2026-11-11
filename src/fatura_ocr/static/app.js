@@ -10,9 +10,14 @@ const S = { files: [], original: [], rows: [], draft: [], edited: false, meta: n
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (c) => (c < 0 ? "-" : "") + "R$ " + Math.floor(Math.abs(c) / 100).toLocaleString("pt-BR") + "," + String(Math.abs(c) % 100).padStart(2, "0");
 const clone = (o) => JSON.parse(JSON.stringify(o));
+const pl = (n, um, varios) => `${n} ${n === 1 ? um : varios}`; // plural de verdade, sem "(s)"
 let toastTimer;
-function toast(msg, ms = 4500) {
+function toast(msg, ms = 4500, action) { // action = { label, fn }: botão no aviso (ex.: Desfazer)
   const t = $("#toast"); t.textContent = msg; t.hidden = false;
+  if (action) {
+    const b = document.createElement("button"); b.className = "toast-act"; b.textContent = action.label;
+    b.onclick = () => { t.hidden = true; action.fn(); }; t.append(b);
+  }
   clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), ms);
 }
 async function api(path, body, isForm) {
@@ -86,7 +91,7 @@ function addFiles(list) {
   const same = (a, b) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
   let dup = 0;
   imgs.forEach((f) => { if (S.files.some((x) => same(x.file, f))) dup += 1; else S.files.push({ file: f, url: URL.createObjectURL(f) }); });
-  if (dup) toast(`${dup} captura(s) já estava(m) na lista e não foi(ram) adicionada(s) de novo.`);
+  if (dup) toast(dup === 1 ? "1 captura já estava na lista e não foi adicionada de novo." : `${dup} capturas já estavam na lista e não foram adicionadas de novo.`);
   renderFiles();
 }
 function renderFiles() {
@@ -103,16 +108,17 @@ function renderFiles() {
     ol.append(li);
   });
   $("#go").disabled = S.busy || S.files.length === 0;
+  if (!S.busy) $("#status").textContent = S.files.length ? "" : "Escolha as capturas para continuar.";
   if (S.meta) $("#sum-files").textContent = S.files.length === S.readCount
-    ? `${S.readCount} captura(s) lida(s) · clique para trocar ou ler de novo`
-    : `${S.files.length} captura(s) · a lista mudou, clique em Ler capturas`;
+    ? `${pl(S.readCount, "captura lida", "capturas lidas")} · clique para trocar ou ler de novo`
+    : `${pl(S.files.length, "captura", "capturas")} · a lista mudou, clique em Ler capturas`;
 }
 
 $("#go").addEventListener("click", async () => {
   if (S.busy) return;
   if (S.meta && (S.edited || diffCount(S.rows, S.draft)) && !confirm("Ler de novo descarta suas edições. Continuar?")) return;
   const btn = $("#go"), status = $("#status");
-  btn.disabled = true; status.textContent = "Lendo as capturas… (cerca de 1 s por imagem)";
+  btn.disabled = true; btn.textContent = "Lendo…"; status.textContent = "Lendo as capturas… (cerca de 1 s por imagem)";
   const fd = new FormData();
   const m = meta(); fd.append("ano", m.ano); fd.append("mes", m.mes);
   fd.append("fechamento", $("#fechamento").value); fd.append("total", $("#total").value);
@@ -126,7 +132,7 @@ $("#go").addEventListener("click", async () => {
     showResults(r);
     status.textContent = "";
   } catch (e) { progress.finish(false); status.textContent = ""; toast(e.message, 8000); }
-  btn.disabled = S.files.length === 0;
+  btn.disabled = S.files.length === 0; btn.textContent = "Ler capturas";
 });
 
 /* /api/process?stream=1: eventos de cada captura em tempo real (leitura em static/stream.js, testada). */
@@ -210,7 +216,10 @@ function showResults(r) {
   r.warnings.forEach((t) => { const d = document.createElement("div"); d.className = "notice"; d.textContent = t; w.append(d); });
   const st = r.stats;
   const info = document.createElement("div"); info.className = "muted small"; info.style.marginBottom = "10px";
-  info.textContent = `${st.rows} transações de ${st.images} captura(s)${st.ignored_images ? ` (${st.ignored_images} igual(is) ignorada(s))` : ""}; ${st.duplicates_removed} repetida(s) por sobreposição removida(s).`;
+  const dupTxt = st.duplicates_removed === 1 ? " 1 aparecia em duas capturas e foi contado uma vez só."
+    : st.duplicates_removed > 1 ? ` ${st.duplicates_removed} apareciam em duas capturas e foram contados uma vez só.` : "";
+  const ignTxt = st.ignored_images ? ` (${st.ignored_images === 1 ? "1 imagem igual a outra foi ignorada" : st.ignored_images + " imagens iguais a outras foram ignoradas"})` : "";
+  info.textContent = `${pl(st.rows, "lançamento lido", "lançamentos lidos")} de ${pl(st.images, "captura", "capturas")}${ignTxt}.${dupTxt}`;
   w.append(info);
   renderTable(); renderBadge(); renderSummary(); renderRecon(); setTab("tabela");
   collapseSteps();
@@ -228,17 +237,38 @@ function reconcile(rows) {
   const net = rows.reduce((s, r) => s + (r.valor_centavos || 0), 0);
   return { total: rec0.total, charges, net, ok: rec0.total === charges || rec0.total === net, diff: charges - rec0.total };
 }
+// Mensagens com cor + ícone de significado fixo: ✓ verde = bate, ⚠ vermelho = não bate, ⚠ âmbar = conferir linhas.
 function renderRecon() {
   const el = $("#recon"); el.innerHTML = "";
-  const add = (cls, text) => { const d = document.createElement("div"); d.className = "notice" + (cls ? " " + cls : ""); d.textContent = text; el.append(d); };
+  const add = (cls, title, items = []) => {
+    const d = document.createElement("div"); d.className = "notice " + cls;
+    const h = document.createElement("strong"); h.textContent = title; d.append(h);
+    if (items.length) {
+      const ul = document.createElement("ul");
+      items.forEach((it) => { const li = document.createElement("li"); li.append(it); ul.append(li); });
+      d.append(ul);
+    }
+    el.append(d);
+  };
   const rec = reconcile(S.rows);
   const toReview = S.rows.filter((r) => r.revisar).length;
-  const reviewTxt = toReview ? ` ${toReview} linha(s) ainda marcada(s) com "revisar".` : "";
   if (rec) {
-    if (rec.ok) add("ok", `✓ A soma bate com o total informado (${fmt(rec.total)}).` + reviewTxt);
-    else if (rec.diff > 0) add("", `A soma das compras (${fmt(rec.charges)}) passa do total informado (${fmt(rec.total)}) em ${fmt(rec.diff)}. Provável: um valor lido errado (confira as linhas "revisar"), ou uma transação repetida ou de outra fatura.` + reviewTxt);
-    else add("", `A soma das compras (${fmt(rec.charges)}) é menor que o total informado (${fmt(rec.total)}): faltam ${fmt(-rec.diff)}. Provável: falta uma captura, um valor lido errado, ou o fechamento da fatura não é o padrão (Avançado).` + reviewTxt);
-  } else if (toReview) add("", `${toReview} linha(s) marcada(s) com "revisar": confira o valor e a data delas.`);
+    const misread = "Algum valor pode ter sido lido errado" + (toReview ? ": comece pelas linhas marcadas com ⚠ revisar." : ".");
+    const sums = `Soma das compras na tabela: ${fmt(rec.charges)} · total da fatura: ${fmt(rec.total)}.`;
+    if (rec.ok) add("ok", `✓ A soma bate com o total da fatura (${fmt(rec.total)}).`);
+    else if (rec.diff > 0) add("bad", `⚠ A soma passou do total da fatura em ${fmt(rec.diff)}`,
+      ["Pode haver uma compra repetida ou de outra fatura.", misread, sums]);
+    else {
+      const adv = document.createElement("button"); adv.className = "linkbtn"; adv.textContent = "Opções avançadas";
+      adv.onclick = () => { $("#step-form").open = true; $(".adv").open = true; $("#fechamento").focus(); };
+      const advLi = document.createDocumentFragment();
+      advLi.append("Se a fatura fecha num dia diferente do normal, ajuste em ", adv, ".");
+      add("bad", `⚠ A soma não bate: faltam ${fmt(-rec.diff)}`,
+        ["Talvez falte uma captura: confira se pegou da primeira à última compra da fatura.", misread, advLi, sums]);
+    }
+  }
+  if (toReview) add("warn", `⚠ ${pl(toReview, "linha com leitura incerta", "linhas com leitura incerta")}: confira antes de copiar.`,
+    ["Depois de conferir (e corrigir, se precisar), clique em ⚠ revisar na linha."]);
 }
 
 /* passos 1 e 2 recolhidos depois da leitura, com um resumo do que foi usado */
@@ -246,7 +276,7 @@ function collapseSteps() {
   const m = usedMeta(), total = $("#total").value.trim();
   $("#sum-form").textContent = `${MONTHS[m.mes - 1]}/${m.ano}` + (total ? ` · total ${total}` : "");
   S.readCount = S.files.length;
-  $("#sum-files").textContent = `${S.readCount} captura(s) lida(s) · clique para trocar ou ler de novo`;
+  $("#sum-files").textContent = `${pl(S.readCount, "captura lida", "capturas lidas")} · clique para trocar ou ler de novo`;
   $("#step-form").open = false; $("#step-files").open = false;
   // o botão "Ler capturas" sumiu ao recolher: leva o foco do teclado para a tabela
   $('[role=tab][aria-selected="true"]').focus({ preventScroll: true });
@@ -275,7 +305,8 @@ function renderTable() {
   const tb = $("#grid tbody"); tb.innerHTML = "";
   S.draft.forEach((r, i) => {
     const tr = document.createElement("tr");
-    if (r.revisar) tr.className = "review";
+    if (r.revisar) tr.classList.add("review");
+    if (/^-/.test(r.valor)) tr.classList.add("credit"); // pagamento/devolução: abate da fatura
     FIELDS.forEach((f) => {
       const td = document.createElement("td"); if (f === "valor") td.className = "num";
       const inp = document.createElement("input"); inp.type = "text"; inp.value = r[f]; inp.dataset.i = i; inp.dataset.f = f;
@@ -290,14 +321,19 @@ function renderTable() {
     });
     const td = document.createElement("td");
     if (r.revisar) {
-      const c = document.createElement("button"); c.className = "chip warn"; c.textContent = "revisar";
+      const c = document.createElement("button"); c.className = "chip warn rev";
+      c.innerHTML = '<span class="a">⚠ revisar</span><span class="b">✓ conferi</span>';
       c.title = "Leitura incerta (confiança " + Math.round(r.conf * 100) + "%). Clique quando tiver conferido a linha.";
       c.setAttribute("aria-label", "Marcar linha " + (i + 1) + " como conferida");
-      c.onclick = () => { // conferida: tira a marca (não altera os dados)
-        [S.rows, S.draft, S.original].forEach((arr) => { const x = rowById(arr, r.id); if (x) x.revisar = false; });
-        renderTable(); renderRecon();
+      const setFlag = (v) => { [S.rows, S.draft, S.original].forEach((arr) => { const x = rowById(arr, r.id); if (x) x.revisar = v; }); renderTable(); renderRecon(); renderSummary(); };
+      c.onclick = () => { // conferida: tira a marca (não altera os dados); dá para desfazer
+        setFlag(false);
+        toast("Linha marcada como conferida.", 6000, { label: "Desfazer", fn: () => setFlag(true) });
       };
       td.append(c);
+    } else if (/^-/.test(r.valor)) {
+      const c = document.createElement("span"); c.className = "chip ok"; c.textContent = "↩ pagamento";
+      c.title = "Valor que abate da fatura (pagamento ou devolução)"; td.append(c);
     }
     const del = document.createElement("button"); del.className = "del"; del.textContent = "✕"; del.title = "Remover linha"; del.setAttribute("aria-label", "Remover linha " + (i + 1));
     del.onclick = () => { S.draft.splice(i, 1); renderTable(); updatePending(); };
@@ -307,15 +343,18 @@ function renderTable() {
 }
 function updatePending() {
   const n = diffCount(S.rows, S.draft);
-  $("#save").disabled = n === 0;
-  $("#pending").textContent = n ? `${n} alteração(ões) ainda não aplicada(s). Clique em Salvar alterações antes de copiar ou salvar o CSV.` : "";
+  const sv = $("#save");
+  sv.disabled = n === 0; sv.classList.toggle("primary", n > 0); // só é o botão principal quando há o que salvar
+  sv.textContent = n ? `Salvar alterações (${n})` : "Salvar alterações";
+  $("#pending").textContent = n ? `${pl(n, "alteração ainda não salva", "alterações ainda não salvas")} (em azul). Copiar e Salvar CSV salvam antes.` : "";
 }
 $("#add").addEventListener("click", () => {
   const today = new Date(); const dd = String(today.getDate()).padStart(2, "0") + "/" + String(today.getMonth() + 1).padStart(2, "0") + "/" + today.getFullYear();
   S.draft.unshift({ id: S.nextId++, data: dd, lancamento: "", categoria: "", tipo: "Compra à vista", valor: "R$ 0,00", conf: 1, revisar: false, chave: "", lancamento_ocr: "" });
   renderTable(); const first = $("#grid tbody input"); if (first) first.focus();
 });
-$("#save").addEventListener("click", async () => {
+// Aplica as edições (valida no servidor). Retorna false se houver erro: a tabela mostra onde.
+async function applyEdits() {
   try {
     // linha corrigida e salva = linha conferida: sai a marca "revisar"
     // (só na cópia enviada: se o salvamento falhar, a marca continua na tabela)
@@ -324,25 +363,29 @@ $("#save").addEventListener("click", async () => {
     if (r.errors.length) {
       renderTable();
       r.errors.forEach((e) => { const inp = $(`#grid input[data-i="${e.index}"][data-f="${/Valor/.test(e.message) ? "valor" : "data"}"]`); if (inp) inp.classList.add("err"); });
-      toast("Corrija antes de salvar: " + r.errors[0].message, 7000); return;
+      toast("Corrija antes de salvar: " + r.errors[0].message, 7000); return false;
     }
     S.rows = clone(r.rows); S.draft = clone(r.rows);
     const n = diffCount(S.original, S.rows); S.edited = n > 0;
     renderTable(); renderBadge(); renderSummary(); renderRecon();
-    toast(S.edited ? "Alterações aplicadas. O resultado foi modificado manualmente." : "Alterações aplicadas. O resultado voltou a ser idêntico à leitura automática.");
-  } catch (e) { toast(e.message, 7000); }
-});
+    toast(S.edited ? "Alterações salvas." : "Alterações salvas. A tabela voltou a ser igual à leitura automática.");
+    return true;
+  } catch (e) { toast(e.message, 7000); return false; }
+}
+$("#save").addEventListener("click", applyEdits);
+// exportar sempre o que está na tela: edições pendentes são salvas antes
+const ensureSaved = async () => diffCount(S.rows, S.draft) === 0 || applyEdits();
 $("#reset").addEventListener("click", () => {
-  if (!confirm("Descartar todas as edições e voltar ao resultado da leitura automática?")) return;
+  if (!confirm("Desfazer todas as correções e voltar ao resultado da leitura automática?")) return;
   S.rows = clone(S.original); S.draft = clone(S.original); S.edited = false;
-  renderTable(); renderBadge(); renderSummary(); renderRecon(); toast("Voltou ao resultado da leitura automática.");
+  renderTable(); renderBadge(); renderSummary(); renderRecon(); toast("Correções desfeitas: a tabela voltou à leitura automática.");
   // desfaz também os nomes corrigidos que tinham sido lembrados
   api("/api/normalize", { rows: S.original, remember: $("#remember").checked }).catch((e) => toast(e.message, 6000));
 });
 function renderBadge() {
   const b = $("#edited"), n = diffCount(S.original, S.rows);
   b.hidden = !S.edited; $("#reset").hidden = !S.edited;
-  if (S.edited) b.textContent = `✎ Editado manualmente · ${n} alteração(ões) desde a leitura automática`;
+  if (S.edited) b.textContent = `✎ Você corrigiu ${pl(n, "item", "itens")} da leitura automática`;
 }
 
 /* ---------- exportar: copiar para planilha / salvar CSV ---------- */
@@ -373,6 +416,7 @@ function copyFallback(text) { // navegadores sem API de área de transferência
   try { return document.execCommand("copy"); } catch { return false; } finally { t.remove(); }
 }
 $("#copy").addEventListener("click", async () => {
+  if (!(await ensureSaved())) return;
   const text = tableText();
   try {
     if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
@@ -400,6 +444,7 @@ $("#savecsv").addEventListener("click", async () => {
   if (saving) return; // clique duplo: um salvamento por vez
   saving = true; $("#savecsv").disabled = true;
   try {
+    if (!(await ensureSaved())) return;
     const blob = await csvBlob(); // primeiro o conteúdo: se falhar, nenhum arquivo vazio é criado
     if (window.showSaveFilePicker) { // Chrome/Edge: janela "Salvar como" do Windows, com o nome já preenchido
       let handle = null;
@@ -446,7 +491,7 @@ function hbars(title, pairs, max = 8) {
 function monthColumns(rows) {
   const m = new Map();
   rows.forEach((r) => { const k = r.data.slice(6) + "-" + r.data.slice(3, 5); m.set(k, (m.get(k) || 0) + r.valor_centavos); });
-  const keys = [...m.keys()].sort(); if (!keys.length) return `<div class="card chart w4"><h3>Compras por mês de origem</h3><p class="muted">Sem dados.</p></div>`;
+  const keys = [...m.keys()].sort(); if (!keys.length) return `<div class="card chart w4"><h3>Quando as compras foram feitas</h3><p class="muted">Sem dados.</p></div>`;
   // largura do desenho = largura da página (o gráfico ocupa a linha toda): texto sem esticar nem encolher
   const W = Math.max(320, Math.min(1040, ($("main").clientWidth || 600) - 80)  /* padding do main (32) + do cartão (44) + borda */), H = 170, pad = 22, top = Math.max(...m.values(), 1), bw = Math.min(34, (W - pad) / keys.length - 6);
   const bars = keys.map((k, i) => {
@@ -455,7 +500,7 @@ function monthColumns(rows) {
     const short = v >= 100000 ? "R$ " + (v / 100000).toFixed(1).replace(".", ",") + " mil" : "R$ " + Math.round(v / 100);
     return `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="4" data-tip="${label}: ${fmt(v)}" tabindex="0"/><text class="val" x="${x + bw / 2}" y="${y - 5}" text-anchor="middle">${short}</text><text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${label}</text>`;
   }).join("");
-  return `<div class="card chart w4"><h3>Compras por mês de origem</h3><svg class="cols" viewBox="0 0 ${W} ${H}" role="img" aria-label="Valor das compras por mês da compra original">${`<line x1="${pad}" x2="${W}" y1="${H - 22}" y2="${H - 22}"/>`}${bars}</svg><p class="muted small">Parcelas aparecem no mês da compra original.</p></div>`;
+  return `<div class="card chart w4"><h3>Quando as compras foram feitas</h3><svg class="cols" viewBox="0 0 ${W} ${H}" role="img" aria-label="Valor das compras por mês da compra original">${`<line x1="${pad}" x2="${W}" y1="${H - 22}" y2="${H - 22}"/>`}${bars}</svg><p class="muted small">Compras parceladas aparecem no mês em que foram feitas.</p></div>`;
 }
 function splitBar(rows) { // à vista × parcelado, dentro do bloco do total
   const a = rows.filter((r) => !/^Parcela/.test(r.tipo)).reduce((s, r) => s + r.valor_centavos, 0);
@@ -478,15 +523,15 @@ function renderSummary() {
   const toReview = rows.filter((r) => r.revisar).length;
   let tag = "";
   if (rec) tag = rec.ok ? `<span class="tag">✓ Bate com o total da fatura</span>`
-    : `<span class="tag bad">${rec.diff < 0 ? "Faltam " : "Sobram "}${fmt(Math.abs(rec.diff))} vs. total ${fmt(rec.total)}</span>`;
-  $("#strip").innerHTML = `<span>Compras<b>${fmt(total)}</b></span><span>Pagamentos e estornos<b>${fmt(cr)}</b></span>`
-    + `<span>Linhas na tabela<b>${rows.length}</b></span>` + (toReview ? `<span class="warn">Revisar<b>${toReview}</b></span>` : "");
+    : `<span class="tag bad">⚠ ${rec.diff < 0 ? "Faltam " + fmt(-rec.diff) + " para o total da fatura" : "Passou " + fmt(rec.diff) + " do total da fatura"} (${fmt(rec.total)})</span>`;
+  $("#strip").innerHTML = `<span>Compras<b>${fmt(total)}</b></span><span class="credit" title="Valores que abatem da fatura: o pagamento da fatura anterior e compras devolvidas">↩ Pagamentos e devoluções<b>${fmt(cr)}</b></span>`
+    + `<span>Linhas na tabela<b>${rows.length}</b></span>` + (toReview ? `<span class="warn">⚠ Revisar<b>${toReview}</b></span>` : "");
   el.innerHTML = `<div class="bento">
-    <div class="card hero"><div><div class="l">Total em compras</div><div class="v">${fmt(total)}</div><div class="s">${spend.length} lançamento(s)</div></div>${splitBar(spend)}${tag}</div>
-    <div class="kpi"><div class="l">Ticket médio</div><div class="v">${fmt(spend.length ? Math.round(total / spend.length) : 0)}</div><div class="s">por compra</div></div>
+    <div class="card hero"><div><div class="l">Total em compras</div><div class="v">${fmt(total)}</div><div class="s">${pl(spend.length, "compra", "compras")}</div></div>${splitBar(spend)}${tag}</div>
+    <div class="kpi"><div class="l">Valor médio por compra</div><div class="v">${fmt(spend.length ? Math.round(total / spend.length) : 0)}</div><div class="s">total ÷ número de compras</div></div>
     <div class="kpi"><div class="l">Maior compra</div><div class="v">${big ? fmt(big.valor_centavos) : "–"}</div><div class="s">${big ? esc(big.lancamento) : ""}</div></div>
-    <div class="kpi"><div class="l">Pagamentos e estornos</div><div class="v">${fmt(cr)}</div><div class="s">${credits.length} lançamento(s)</div></div>
-    <div class="kpi"><div class="l">Para revisar</div><div class="v">${toReview}</div><div class="s">${toReview ? "linhas com leitura incerta" : "nenhuma leitura incerta"}</div></div>
-    ${hbars("Gasto por categoria", sumBy(spend, (r) => r.categoria || "SEM CATEGORIA"))}${hbars("Maiores estabelecimentos", sumBy(spend, (r) => r.lancamento || "(sem nome)"), 6)}${monthColumns(spend)}</div>
-    <p class="muted small">Os gráficos usam as linhas da tabela (já com suas edições salvas). Pagamentos e estornos ficam fora dos gráficos.</p>`;
+    <div class="kpi credit" title="Valores que abatem da fatura: o pagamento da fatura anterior e compras devolvidas"><div class="l">↩ Pagamentos e devoluções</div><div class="v">${fmt(cr)}</div><div class="s">${pl(credits.length, "lançamento", "lançamentos")} · abatem da fatura</div></div>
+    <div class="kpi${toReview ? " warn" : ""}"><div class="l">${toReview ? "⚠ " : "✓ "}Para revisar</div><div class="v">${toReview}</div><div class="s">${toReview ? "leitura incerta: confira na Tabela" : "nenhuma leitura incerta"}</div></div>
+    ${hbars("Gasto por categoria", sumBy(spend, (r) => r.categoria || "SEM CATEGORIA"))}${hbars("Onde você mais gastou", sumBy(spend, (r) => r.lancamento || "(sem nome)"), 6)}${monthColumns(spend)}</div>
+    <p class="muted small">Os gráficos usam as linhas da tabela (já com suas edições salvas). Pagamentos e devoluções ficam fora dos gráficos.</p>`;
 }
