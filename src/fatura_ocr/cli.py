@@ -36,8 +36,7 @@ def main(argv: list[str] | None = None) -> None:
 
     port = free_port(args.port)
     url = f"http://{HOST}:{port}/"
-    print(f"\n  Fatura OCR rodando em {url}")
-    print("  Para encerrar, feche esta janela ou aperte Ctrl+C.\n")
+    print(f"  Se o navegador nao abrir, copie este endereco: {url}\n")
     if not args.no_browser:
         threading.Timer(1.2, webbrowser.open, args=(url,)).start()
     uvicorn.run(create_app(), host=HOST, port=port, log_level="warning")

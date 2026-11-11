@@ -80,6 +80,10 @@ jobs:
           # icone versionado pelo conteudo (o cache de icones do Windows e por caminho)
           $icon = ((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).IconLocation -split ',')[0]
           if ($icon -cnotmatch 'fatura-[0-9a-f]{8}\.ico$' -or -not (Test-Path $icon)) { throw "shortcut icon not versioned: $icon" }
+          # de novo por cima: os atalhos existentes sao apagados e recriados (icone novo tambem na Area de Trabalho)
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar.ps1
+          $icon2 = ((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).IconLocation -split ',')[0]
+          if ($icon2 -cne $icon -or -not (Test-Path $icon2)) { throw "reinstall: shortcut icon is '$icon2'" }
           $mb = (Get-ChildItem $app -Recurse -Force -File | Measure-Object Length -Sum).Sum / 1MB
           Write-Host ('Installed size: {0:N0} MB' -f $mb)
       - name: Start with iniciar.ps1 and load the page

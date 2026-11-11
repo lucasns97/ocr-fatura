@@ -6,8 +6,8 @@ $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
 Set-Location -Path $PSScriptRoot
 
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-    Write-Host 'O uv nao foi encontrado. Rode primeiro o "instalar.cmd".' -ForegroundColor Red
-    Read-Host 'Aperte Enter para fechar'
+    Write-Host 'O Fatura OCR nao esta instalado direito. Abra o instalador ("instalar") de novo.' -ForegroundColor Red
+    Read-Host 'Aperte Enter para fechar esta janela'
     return
 }
 
@@ -27,13 +27,13 @@ if (-not $env:CI -and -not $env:FATURA_OCR_NO_UPDATE) {
     if ($latest -and $latest -ne $mine -and $open) {
         # ja esta aberto em outra janela: o instalador nao pode trocar os arquivos agora
         Write-Host ''
-        Write-Host "Ha uma versao nova do Fatura OCR ($latest). Para atualizar, feche o Fatura OCR que ja esta aberto e abra o atalho de novo." -ForegroundColor Yellow
+        Write-Host 'Tem uma versao nova do Fatura OCR. Para atualizar: feche a outra janela preta do Fatura OCR e abra o atalho de novo.' -ForegroundColor Yellow
     } elseif ($latest -and $latest -ne $mine) {
         Write-Host ''
-        $have = if ($mine) { "instalada: $mine" } else { 'versao instalada desconhecida' }
-        Write-Host "Ha uma versao nova do Fatura OCR: $latest ($have)." -ForegroundColor Yellow
+        $have = if ($mine) { "; a sua e $mine" } else { '' }
+        Write-Host "Tem uma versao nova do Fatura OCR ($latest$have)." -ForegroundColor Yellow
         # FATURA_OCR_ASSUME_UPDATE=1: responde "sim" sozinho (teste automatico no CI)
-        $answer = if ($env:FATURA_OCR_ASSUME_UPDATE) { 's' } else { Read-Host 'Atualizar agora? Costuma levar 1 a 2 minutos. [S/n]' }
+        $answer = if ($env:FATURA_OCR_ASSUME_UPDATE) { 's' } else { Read-Host 'Atualizar agora? Leva 1 a 2 minutos e seus dados ficam. Enter = sim, N = depois' }
         if ($answer -notmatch '^[nN]') {
             # o instalador troca os arquivos desta pasta; este script ja esta na memoria e segue depois
             $env:FATURA_OCR_UPDATING = '1'
@@ -45,25 +45,32 @@ if (-not $env:CI -and -not $env:FATURA_OCR_NO_UPDATE) {
             if (-not $whole) {
                 # parou depois de apagar os arquivos antigos: nao ha versao para abrir
                 Write-Host 'A atualizacao parou no meio e o programa ficou incompleto.' -ForegroundColor Red
-                Write-Host 'Para reinstalar, rode de novo o comando de instalacao do README (item A).'
-                Read-Host 'Aperte Enter para fechar'
+                Write-Host 'Para consertar, instale de novo do mesmo jeito da primeira vez. Seus dados ficam.'
+                Read-Host 'Aperte Enter para fechar esta janela'
                 return
             } elseif ($now -eq $latest) {
-                Write-Host "Atualizado para $latest! Abrindo a versao nova..." -ForegroundColor Green
+                Write-Host "Tudo certo, atualizado para $latest. Abrindo..." -ForegroundColor Green
             } else {
-                Write-Host 'A atualizacao nao terminou (veja a mensagem acima). Vamos abrir a versao instalada.' -ForegroundColor Yellow
-                Write-Host 'Para tentar de novo: feche esta janela e abra o atalho de novo.'
+                Write-Host 'A atualizacao nao deu certo; vamos abrir a versao que voce ja tinha.' -ForegroundColor Yellow
+                Write-Host 'Para tentar de novo outra hora, e so abrir o atalho.'
             }
         } else {
-            Write-Host 'Ok, abrindo a versao instalada. Para atualizar depois, e so abrir o atalho de novo.'
+            Write-Host 'Ok, fica para depois. O atalho pergunta de novo na proxima vez.'
         }
     }
 }
 
-Write-Host 'Abrindo o Fatura OCR no navegador...'
-Write-Host 'Deixe esta janela aberta enquanto usa o programa. Para encerrar, feche-a.'
-& uv run --frozen --no-dev fatura @args
+# o aviso mais importante: fechar esta janela fecha o programa
+$bar = '-' * 50
+Write-Host ''
+Write-Host $bar -ForegroundColor Yellow
+Write-Host '  O Fatura OCR esta abrindo no seu navegador.' -ForegroundColor Yellow
+Write-Host '  NAO feche esta janela enquanto estiver usando.' -ForegroundColor Yellow
+Write-Host '  Terminou? Pode fechar esta janela.' -ForegroundColor Yellow
+Write-Host $bar -ForegroundColor Yellow
+& uv run --quiet --frozen --no-dev fatura @args
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "O programa parou com erro (codigo $LASTEXITCODE). Tente rodar o instalar.cmd de novo." -ForegroundColor Red
-    Read-Host 'Aperte Enter para fechar'
+    Write-Host "O Fatura OCR fechou com um erro (codigo $LASTEXITCODE)." -ForegroundColor Red
+    Write-Host 'Tente abrir o atalho de novo. Se continuar, abra o instalador de novo.'
+    Read-Host 'Aperte Enter para fechar esta janela'
 }

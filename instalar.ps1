@@ -21,33 +21,40 @@ $ProgressPreference = 'SilentlyContinue'   # deixa os downloads bem mais rapidos
 $Repo = 'lucasns97/ocr-fatura'
 $Dest = Join-Path $env:LOCALAPPDATA 'FaturaOCR'
 
-function Step($msg) { Write-Host ''; Write-Host "==> $msg" -ForegroundColor Cyan }
+# Textos para quem nao e da area: passos numerados, nada de caminhos ou nomes tecnicos na tela.
+function Step($n, $msg) { Write-Host ''; Write-Host "[$n/4] $msg" -ForegroundColor Cyan }
+function Detail($msg) { Write-Host "      $msg" -ForegroundColor DarkGray }
+function Box($color, [string[]]$lines) {
+    $bar = '=' * 50
+    Write-Host ''
+    Write-Host $bar -ForegroundColor $color
+    foreach ($l in $lines) { Write-Host "  $l" -ForegroundColor $color }
+    Write-Host $bar -ForegroundColor $color
+}
 
 function Install-FaturaOcr {
     # 1. uv
-    Step 'Verificando o uv (gerenciador de Python)'
+    Step 1 'Preparando a instalacao'
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-        Write-Host 'Instalando o uv (https://docs.astral.sh/uv/)...'
-        # processo novo: liga o TLS 1.2 nele tambem (nao herda a configuracao deste)
-        powershell -NoProfile -ExecutionPolicy Bypass -Command '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://astral.sh/uv/install.ps1 | iex'
+        # instala o uv (gerenciador de Python da Astral). Processo novo: liga o TLS 1.2 nele tambem (nao herda
+        # a configuracao deste). A saida dele (caminhos, "reinicie o terminal") confunde: so os erros aparecem.
+        powershell -NoProfile -ExecutionPolicy Bypass -Command '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://astral.sh/uv/install.ps1 | iex' | Out-Null
         if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-            throw 'Nao foi possivel instalar o uv. Verifique a internet e rode o instalador de novo.'
+            throw 'Nao deu para baixar uma parte do programa. Confira se a internet esta funcionando.'
         }
     }
-    Write-Host ('uv encontrado: ' + (Get-Command uv).Source)
 
     # 2. arquivos do programa
-    Step "Copiando o programa para $Dest"
     $running = Get-Process python, pythonw -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$Dest\*" }
-    if ($running) { throw 'O Fatura OCR esta aberto. Feche a janela dele e rode o instalador de novo.' }
+    if ($running) { throw 'O Fatura OCR esta aberto. Feche a janela preta dele e abra o instalador de novo.' }
     $src = $PSScriptRoot
     $tmp = $null
     $ver = $null
     # Rodando da pasta ja instalada (ou sem pasta, via "irm | iex"): baixa a versao mais recente.
     $isInstalled = $src -and ((Resolve-Path $src).Path.TrimEnd('\') -eq $Dest.TrimEnd('\'))
     if (-not $src -or $isInstalled -or -not (Test-Path (Join-Path $src 'pyproject.toml'))) {
-        Write-Host "Baixando a versao mais recente de github.com/$Repo ..."
+        Step 2 'Baixando o Fatura OCR'
         $tmp = Join-Path $env:TEMP ('fatura-ocr-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $tmp | Out-Null
         $zip = Join-Path $tmp 'app.zip'
@@ -59,10 +66,12 @@ function Install-FaturaOcr {
             if ($ver -cnotmatch '^v\d+\.\d+\.\d+$') { $ver = $null }
         }
         $ref = if ($ver) { "refs/tags/$ver" } else { 'refs/heads/main' }
-        if ($ver) { Write-Host "Versao $ver" }
+        if ($ver) { Detail "versao $ver" }
         Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$Repo/archive/$ref.zip" -OutFile $zip
         Expand-Archive -Path $zip -DestinationPath $tmp -Force
         $src = (Get-ChildItem $tmp -Directory | Select-Object -First 1).FullName
+    } else {
+        Step 2 'Copiando o Fatura OCR'
     }
     New-Item -ItemType Directory -Force -Path $Dest | Out-Null
     # troca os arquivos do programa; mantem o .venv para a atualizacao ser rapida
@@ -74,15 +83,16 @@ function Install-FaturaOcr {
     if ($ver) { Set-Content -Path (Join-Path $Dest 'VERSION') -Value $ver -Encoding Ascii }
 
     # 3. Python + dependencias
-    Step 'Instalando o Python e as dependencias (a primeira vez leva alguns minutos)'
+    Step 3 'Instalando os componentes'
+    Detail 'Na primeira vez leva alguns minutos; pode deixar rodando.'
     Push-Location $Dest
     try {
-        & uv sync --frozen --no-dev
-        if ($LASTEXITCODE -ne 0) { throw "uv sync falhou (codigo $LASTEXITCODE)." }
+        & uv sync --frozen --no-dev --quiet   # lista de pacotes escondida; erros continuam aparecendo
+        if ($LASTEXITCODE -ne 0) { throw "A instalacao dos componentes falhou (codigo $LASTEXITCODE)." }
     } finally { Pop-Location }
 
     # 4. atalhos
-    Step 'Criando os atalhos'
+    Step 4 'Criando o atalho'
     # O Windows guarda o icone em cache pelo caminho do arquivo: com o mesmo caminho, um icone novo
     # continuava aparecendo o antigo (mesmo apagando o atalho). O nome leva um pedaco do hash do
     # conteudo, entao um icone novo tem um caminho novo.
@@ -97,23 +107,30 @@ function Install-FaturaOcr {
     $shell = New-Object -ComObject WScript.Shell
     foreach ($dir in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
         if (-not $dir) { continue }
-        $lnk = $shell.CreateShortcut((Join-Path $dir 'Fatura OCR.lnk'))
+        $lnkPath = Join-Path $dir 'Fatura OCR.lnk'
+        # apaga e cria de novo: sobrescrever o mesmo arquivo nao faz a Area de Trabalho redesenhar o icone
+        # (o Menu Iniciar redesenhava; a Area de Trabalho mantinha o antigo ate o atalho ser apagado)
+        if (Test-Path $lnkPath) { Remove-Item -Path $lnkPath -Force }
+        $lnk = $shell.CreateShortcut($lnkPath)
         $lnk.TargetPath = Join-Path $Dest 'iniciar.cmd'
         $lnk.WorkingDirectory = $Dest
         $lnk.IconLocation = $icoLnk + ',0'
         $lnk.Description = 'Fatura OCR: capturas da fatura para CSV'
         $lnk.Save()
-        Write-Host "Atalho criado em $dir"
     }
     # pede ao Windows para redesenhar os icones (Windows 10/11); se nao existir, o icone novo aparece depois
     $ie4 = Join-Path $env:SystemRoot 'System32\ie4uinit.exe'
     if (Test-Path $ie4) { try { & $ie4 -show; $global:LASTEXITCODE = 0 } catch { } }
+    # e avisa o Explorer que icones mudaram (SHCNE_ASSOCCHANGED): a Area de Trabalho redesenha os atalhos
+    try {
+        Add-Type -Namespace FaturaOcr -Name Shell -MemberDefinition '[DllImport("shell32.dll")] public static extern void SHChangeNotify(int e, uint f, IntPtr a, IntPtr b);'
+        [FaturaOcr.Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+    } catch { }
 
-    Write-Host ''
-    Write-Host 'Pronto! Para abrir, use o atalho "Fatura OCR" na Area de Trabalho ou no Menu Iniciar.' -ForegroundColor Green
+    Box Green @('Tudo certo! O Fatura OCR esta instalado.', 'Para abrir: clique no atalho "Fatura OCR"', 'na Area de Trabalho ou no Menu Iniciar.')
     if ($env:CI) { return }   # CI (GitHub Actions): sem pergunta
     if ($env:FATURA_OCR_UPDATING) { return }   # atualizacao pedida pelo atalho: ele mesmo abre a versao nova
-    $answer = Read-Host 'Abrir o Fatura OCR agora? [S/n]'
+    $answer = Read-Host 'Abrir o Fatura OCR agora? Enter = sim, N = nao'
     if ($answer -notmatch '^[nN]') { Start-Process -FilePath (Join-Path $Dest 'iniciar.cmd') }
 }
 
@@ -122,8 +139,12 @@ try {
 } catch {
     # sem "exit": quem colou o comando no PowerShell nao perde a janela
     Write-Host ''
-    Write-Host ('ERRO: ' + $_.Exception.Message) -ForegroundColor Red
-    Write-Host 'A instalacao nao terminou. Corrija o problema acima e rode o instalador de novo.'
-    Write-Host '(Os nomes de estabelecimentos salvos em %USERPROFILE%\.fatura-ocr nao foram tocados.)'
+    Write-Host ('Algo deu errado: ' + $_.Exception.Message) -ForegroundColor Red
+    Box Red @('A instalacao parou no meio. O que fazer:',
+              '1. Confira a internet e feche o Fatura OCR, se estiver aberto.',
+              '2. Abra o instalador de novo.',
+              '3. Se falhar de novo, tire um print desta janela e mande',
+              '   para quem te passou o programa.',
+              'Os nomes de lojas que voce corrigiu continuam salvos.')
     if ($env:CI) { throw }   # so no CI: falha o job em vez de terminar com sucesso
 }
