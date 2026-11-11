@@ -12,6 +12,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import secrets
 import threading
 import traceback
@@ -53,6 +54,18 @@ def asset_version() -> str:
     for name in ASSETS:
         h.update((STATIC / name).read_bytes())
     return h.hexdigest()[:12]
+
+
+ROOT = Path(__file__).resolve().parents[2]  # pasta do programa (onde o instalador grava VERSION)
+
+
+def app_version(root: Path = ROOT) -> str:
+    """Versão instalada ("v1.0.5"), gravada pelo instalador ao baixar uma versão publicada; "" se desconhecida."""
+    try:
+        v = (root / "VERSION").read_text(encoding="ascii").strip()
+    except (OSError, UnicodeDecodeError):
+        return ""
+    return v if re.fullmatch(r"v\d+\.\d+\.\d+", v) else ""
 
 
 def default_due(today: date) -> tuple[int, int]:
@@ -102,7 +115,8 @@ def create_app(token: str | None = None, home: Path | None = None, read_lines=No
             page = page.replace(f"/static/{name}", f"/static/{name}?v={v}")
         return (page.replace("__TOKEN__", token)
                     .replace("__DEFAULT_YEAR__", str(due_year))
-                    .replace("__DEFAULT_MONTH__", str(due_month)))
+                    .replace("__DEFAULT_MONTH__", str(due_month))
+                    .replace("__VERSION__", app_version()))
 
     @app.post("/api/process")
     async def process(ano: int = Form(...), mes: int = Form(...), fechamento: str = Form(""),

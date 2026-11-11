@@ -70,6 +70,19 @@ class Server(unittest.TestCase):
         self.assertEqual(r.headers["cache-control"], "no-cache")
         self.assertEqual(self.c.get(f"/static/app.js?v={v}").headers["cache-control"], "no-cache")
 
+    def test_version_shown_only_when_known(self):
+        import tempfile
+        from pathlib import Path
+        from fatura_ocr.server import app_version
+        self.assertNotIn("__VERSION__", self.c.get("/").text)  # placeholder sempre substituído
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(app_version(root), "")                 # instalado de cópia local: sem versão
+            (root / "VERSION").write_text("v1.0.7\r\n", encoding="ascii")
+            self.assertEqual(app_version(root), "v1.0.7")
+            (root / "VERSION").write_text("<script>", encoding="ascii")
+            self.assertEqual(app_version(root), "")                 # só aceita vX.Y.Z (vai para o HTML)
+
     def test_api_requires_token_and_local_host(self):
         self.assertEqual(self.c.post("/api/csv", json={"rows": []}).status_code, 403)
         evil = TestClient(self.c.app, base_url="http://evil.example:8765")

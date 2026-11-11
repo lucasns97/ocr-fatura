@@ -82,7 +82,12 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
 
 ## Atualizar e desinstalar
 
-- **Atualizar:** rode o instalador de novo (o comando do item A, ou `instalar.cmd` na pasta do programa). Feche o Fatura OCR antes.
+- **Atualizar:** ao abrir pelo atalho, o programa confere no GitHub se há uma versão nova e pergunta se você quer
+  atualizar (responda **S** e ele atualiza e abre a versão nova; **n** abre a que já está instalada). Ele só consulta
+  qual é a versão mais recente: nenhum dado seu é enviado. Sem internet, abre normalmente, sem perguntar.
+  Também dá para atualizar rodando o instalador de novo (o comando do item A, ou `instalar.cmd` na pasta do programa),
+  com o Fatura OCR fechado. Quem instalou antes desta função precisa rodar o instalador uma vez para recebê-la.
+  Cada mudança aprovada no projeto vira uma versão nova (v1.0.0, v1.0.1, ...); a versão instalada aparece no topo da página, ao lado do nome.
   Se o ícone do atalho mudou numa versão nova e ainda aparece o antigo, saia e entre de novo no Windows (ou reinicie).
 - **Desinstalar:** dois cliques em `desinstalar.cmd` (na pasta `%LOCALAPPDATA%\FaturaOCR`). Os nomes corrigidos ficam em
   `%USERPROFILE%\.fatura-ocr`; apague essa pasta se quiser removê-los também.
