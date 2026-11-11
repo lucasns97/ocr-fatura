@@ -448,7 +448,7 @@ function monthColumns(rows) {
   rows.forEach((r) => { const k = r.data.slice(6) + "-" + r.data.slice(3, 5); m.set(k, (m.get(k) || 0) + r.valor_centavos); });
   const keys = [...m.keys()].sort(); if (!keys.length) return `<div class="card chart w4"><h3>Compras por mês de origem</h3><p class="muted">Sem dados.</p></div>`;
   // largura do desenho = largura da página (o gráfico ocupa a linha toda): texto sem esticar nem encolher
-  const W = Math.max(320, Math.min(1040, ($("main").clientWidth || 600) - 90)), H = 170, pad = 22, top = Math.max(...m.values(), 1), bw = Math.min(34, (W - pad) / keys.length - 6);
+  const W = Math.max(320, Math.min(1040, ($("main").clientWidth || 600) - 80)  /* padding do main (32) + do cartão (44) + borda */), H = 170, pad = 22, top = Math.max(...m.values(), 1), bw = Math.min(34, (W - pad) / keys.length - 6);
   const bars = keys.map((k, i) => {
     const v = m.get(k), h = Math.max(2, (v / top) * (H - 46)), x = pad + i * ((W - pad) / keys.length) + 3, y = H - 22 - h;
     const label = k.slice(5) + "/" + k.slice(2, 4);
@@ -465,6 +465,9 @@ function splitBar(rows) { // à vista × parcelado, dentro do bloco do total
     <span style="flex:${p};background:var(--series-2)" data-tip="Parcelado: ${fmt(p)} (${(p / t * 100).toFixed(0)}%)"></span></div>
     <div class="legend"><span><i style="background:var(--series-1)"></i>À vista ${fmt(a)}</span><span><i style="background:var(--series-2)"></i>Parcelado ${fmt(p)}</span></div></div>`;
 }
+// o gráfico por mês é desenhado na largura da página: redesenha quando a janela muda de tamanho
+let resizeT;
+addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (!$("#results").hidden && S.rows) renderSummary(); }, 150); });
 function renderSummary() {
   const el = $("#tab-resumo"), rows = S.rows;
   const spend = rows.filter((r) => r.valor_centavos > 0), credits = rows.filter((r) => r.valor_centavos < 0);
@@ -477,7 +480,7 @@ function renderSummary() {
   if (rec) tag = rec.ok ? `<span class="tag">✓ Bate com o total da fatura</span>`
     : `<span class="tag bad">${rec.diff < 0 ? "Faltam " : "Sobram "}${fmt(Math.abs(rec.diff))} vs. total ${fmt(rec.total)}</span>`;
   $("#strip").innerHTML = `<span>Compras<b>${fmt(total)}</b></span><span>Pagamentos e estornos<b>${fmt(cr)}</b></span>`
-    + `<span>Lançamentos<b>${rows.length}</b></span>` + (toReview ? `<span class="warn">Revisar<b>${toReview}</b></span>` : "");
+    + `<span>Linhas na tabela<b>${rows.length}</b></span>` + (toReview ? `<span class="warn">Revisar<b>${toReview}</b></span>` : "");
   el.innerHTML = `<div class="bento">
     <div class="card hero"><div><div class="l">Total em compras</div><div class="v">${fmt(total)}</div><div class="s">${spend.length} lançamento(s)</div></div>${splitBar(spend)}${tag}</div>
     <div class="kpi"><div class="l">Ticket médio</div><div class="v">${fmt(spend.length ? Math.round(total / spend.length) : 0)}</div><div class="s">por compra</div></div>

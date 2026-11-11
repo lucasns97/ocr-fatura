@@ -65,6 +65,8 @@ class Server(unittest.TestCase):
         self.assertIn(f'/static/style.css?v={v}"', r.text)
         self.assertIn(f'/static/money.js?v={v}"', r.text)
         self.assertIn(f'/static/stream.js?v={v}"', r.text)
+        self.assertIn(f'/static/icon.svg?v={v}"', r.text)  # ícone (favicon e logo)
+        self.assertEqual(self.c.get(f"/static/icon.svg?v={v}").headers["content-type"].split(";")[0], "image/svg+xml")
         self.assertEqual(r.headers["cache-control"], "no-cache")
         self.assertEqual(self.c.get(f"/static/app.js?v={v}").headers["cache-control"], "no-cache")
 

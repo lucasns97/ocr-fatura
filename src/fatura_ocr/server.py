@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import mimetypes
 import os
 import secrets
 import threading
@@ -28,6 +29,8 @@ from .money import parse_user_money
 from .pipeline import default_closing, process_images
 
 STATIC = Path(__file__).parent / "static"
+# o Windows pode mapear extensões pelo registro; o ícone precisa de image/svg+xml para aparecer
+mimetypes.add_type("image/svg+xml", ".svg")
 MAX_FILES = 40
 MAX_BYTES = 20 * 1024 * 1024
 
