@@ -101,8 +101,10 @@ $null = $p.Handle   # sem isso o ExitCode pode vir vazio no PowerShell 5
 $B = [string][char]0x2588
 # Painel em linhas fixas: 0 = "iniciando", 2 = linha ao vivo (ONLINE...), 4 = aviso, 5 = endereco.
 # O aviso e o endereco ficam embaixo, parados; so as linhas 0 e 2 sao redesenhadas no lugar.
+# (Se a janela for redimensionada, o Windows pode realinhar o texto e o painel se desenhar fora do lugar.)
 foreach ($i in 0..6) { Write-Host '' }
 $base = 0; try { $base = [Console]::CursorTop - 7 } catch { }
+$panelDone = $false
 function Go([int]$row) { try { [Console]::SetCursorPosition(0, $base + $row) } catch { } }
 function Footer([string]$url) {
     Go 4; Write-Host '  NAO feche esta janela enquanto usa o Fatura OCR.' -ForegroundColor Yellow
@@ -145,7 +147,7 @@ try {
             $t++
         }
     }
-    Go 7   # mensagens depois do painel
+    Go 7; $panelDone = $true   # mensagens depois do painel
     # o servidor parou sozinho (erro): mostra o fim do log e o que fazer
     $p.WaitForExit()
     Ui-Cursor $true
@@ -157,6 +159,7 @@ try {
         Read-Host '  Aperte Enter para fechar esta janela'
     }
 } finally {
+    if (-not $panelDone) { Go 7 }   # Ctrl+C ou erro: o que vier depois nao escreve por cima do painel
     Ui-Cursor $true
     # o uv abre o Python como filho: encerra os dois juntos
     if (-not $p.HasExited) { & taskkill.exe /PID $p.Id /T /F 2>$null | Out-Null }
