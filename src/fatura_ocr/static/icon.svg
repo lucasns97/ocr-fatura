@@ -1,13 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1fb5a3"/><stop offset=".55" stop-color="#3656c9"/><stop offset="1" stop-color="#6d3bd6"/></linearGradient>
-    <linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5a6fbf"/><stop offset=".55" stop-color="#3f4196"/><stop offset="1" stop-color="#2e2771"/></linearGradient>
+    <radialGradient id="glow" cx=".18" cy=".62" r=".55"><stop offset="0" stop-color="#2fd6b8" stop-opacity=".45"/><stop offset="1" stop-color="#2fd6b8" stop-opacity="0"/></radialGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5873c9"/><stop offset="1" stop-color="#4a3aa0"/></linearGradient>
+    <filter id="blur" x="-20%" y="-300%" width="140%" height="700%"><feGaussianBlur stdDeviation="1.6"/></filter>
   </defs>
-  <rect width="64" height="64" rx="15" fill="url(#g)"/>
-  <rect x="1" y="1" width="62" height="30" rx="14" fill="url(#h)"/>
-  <g fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M15.5 43V20.5h8.5a6.4 6.4 0 0 1 0 12.8h-8.5M24.5 33.3L31 43"/>
-    <path d="M47 24.6c-1.5-2.2-3.9-3.3-6.4-3.3-3.6 0-6.2 2-6.2 4.9 0 3.2 3 4.3 6.5 5.2 3.6.9 6.7 2.2 6.7 5.6 0 3-2.8 5.2-6.8 5.2-2.8 0-5.3-1.2-6.9-3.4M40.8 16.5v31"/>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <rect width="64" height="64" rx="15" fill="url(#glow)"/>
+  <rect x=".75" y=".75" width="62.5" height="62.5" rx="14.3" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="1.5"/>
+  <!-- celular -->
+  <rect x="18" y="7.5" width="28" height="49" rx="6.5" fill="url(#screen)" stroke="#1d2150" stroke-width="2.4"/>
+  <rect x="27" y="9.2" width="10" height="3" rx="1.5" fill="#1d2150"/>
+  <!-- comprovante -->
+  <path d="M23 18.5a2.5 2.5 0 0 1 2.5-2.5h13a2.5 2.5 0 0 1 2.5 2.5V44H23z" fill="#f4f1e7"/>
+  <path d="M16.5 43.2h24.5v2.6a3.2 3.2 0 0 1-3.2 3.2H19.7a3.2 3.2 0 0 1-3.2-3.2z" fill="#e6e1d2"/>
+  <g stroke="#b8b4a6" stroke-width="2" stroke-linecap="round">
+    <path d="M26.5 21.5h6M26.5 25.5h4M26.5 37.5h7"/>
   </g>
-  <path d="M15.5 51.5h33" stroke="#fff" stroke-width="3.4" stroke-linecap="round" opacity=".9"/>
+  <g fill="none" stroke="#28a865" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M33.8 22.6l1.9 1.9 3.6-3.8"/><path d="M33.8 38.6l1.9 1.9 3.6-3.8"/>
+  </g>
+  <!-- linha de leitura -->
+  <rect x="11" y="30" width="42" height="3" rx="1.5" fill="#43f0d2" filter="url(#blur)"/>
+  <rect x="11" y="30.6" width="42" height="1.8" rx=".9" fill="#b9fff2"/>
 </svg>

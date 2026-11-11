@@ -143,11 +143,12 @@ tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 60%, var(--s
 #grid td input.err { border-color: var(--err); background: color-mix(in srgb, var(--err) 12%, var(--surface)); }
 #grid td.num input, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 #grid td input.neg { color: var(--ok); }
-/* significado fixo das cores: âmbar ⚠ = leitura incerta, verde ↩ = pagamento/devolução, azul = alterado, vermelho = não bate */
+/* "revisar" vence: linha a conferir é sempre amarela, mesmo sendo pagamento (o valor continua verde)
+   significado fixo das cores: âmbar ⚠ = leitura incerta, verde ↩ = pagamento/devolução, azul = alterado, vermelho = não bate */
 #grid tr.review td { background: color-mix(in srgb, var(--warn-bg) 70%, var(--solid)); }
 #grid tr.review td:first-child { box-shadow: inset 4px 0 0 var(--warn-ink); }
-#grid tr.credit td { background: color-mix(in srgb, var(--ok) 8%, var(--solid)); }
-#grid tr.credit td:first-child { box-shadow: inset 4px 0 0 var(--ok); }
+#grid tr.credit:not(.review) td { background: color-mix(in srgb, var(--ok) 8%, var(--solid)); }
+#grid tr.credit:not(.review) td:first-child { box-shadow: inset 4px 0 0 var(--ok); }
 .chip.ok { background: color-mix(in srgb, var(--ok) 14%, var(--solid)); color: var(--ok); font-weight: 600; white-space: nowrap; }
 .chip.rev .b { display: none; }
 .chip.rev:hover .a, .chip.rev:focus-visible .a { display: none; }

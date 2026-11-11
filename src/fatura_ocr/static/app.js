@@ -213,7 +213,7 @@ function startProgress() {
 function showResults(r) {
   $("#results").hidden = false;
   const w = $("#warnings"); w.innerHTML = "";
-  r.warnings.forEach((t) => { const d = document.createElement("div"); d.className = "notice"; d.textContent = t; w.append(d); });
+  S.warnings = r.warnings; // avisos da leitura: mostrados junto com as linhas a revisar (renderRecon)
   const st = r.stats;
   const info = document.createElement("div"); info.className = "muted small"; info.style.marginBottom = "10px";
   const dupTxt = st.duplicates_removed === 1 ? " 1 aparecia em duas capturas e foi contado uma vez só."
@@ -267,8 +267,10 @@ function renderRecon() {
         ["Talvez falte uma captura: confira se pegou da primeira à última compra da fatura.", misread, advLi, sums]);
     }
   }
-  if (toReview) add("warn", `⚠ ${pl(toReview, "linha com leitura incerta", "linhas com leitura incerta")}: confira antes de copiar.`,
-    ["Depois de conferir (e corrigir, se precisar), clique em ⚠ revisar na linha."]);
+  // um só aviso amarelo, um item por problema: avisos da leitura + linhas marcadas para revisar
+  const items = [...(S.warnings || [])];
+  if (toReview) items.push(`${pl(toReview, "linha marcada", "linhas marcadas")} com ⚠ revisar (em amarelo). Depois de conferir, clique na marca da linha.`);
+  if (items.length) add("warn", "⚠ Confira antes de copiar", items);
 }
 
 /* passos 1 e 2 recolhidos depois da leitura, com um resumo do que foi usado */

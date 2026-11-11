@@ -89,7 +89,7 @@ class RealOcr(unittest.TestCase):
             ("22/07/2026", "-R$ 111,33", "Compra à vista", True),
             ("22/07/2026", "R$ 80,00", "Compra à vista", False)])
         self.assertNotIn("Pagar", res.rows[2]["lancamento"])
-        self.assertTrue(any("estimativa" in w for w in res.warnings), res.warnings)
+        self.assertTrue(any("ficou acima da captura" in w for w in res.warnings), res.warnings)
 
     def test_low_resolution_image_is_flagged(self):
         from fatura_ocr.aliases import AliasStore

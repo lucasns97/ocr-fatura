@@ -96,7 +96,7 @@ class Process(unittest.TestCase):
             res = process_images([b"1"], 2026, 8, None, None, AliasStore(Path(tmp) / "a.json"), read_lines=lambda _: (s, H))
         self.assertEqual([(r["data"], r["valor"], r["revisar"]) for r in res.rows], [
             ("22/07/2026", "R$ 104,45", True), ("22/07/2026", "-R$ 11,58", True), ("22/07/2026", "R$ 80,00", False)])
-        self.assertTrue(any("estimativa" in w and "Imagem 1: 2 lançamentos" in w for w in res.warnings), res.warnings)
+        self.assertTrue(any("dos 2 primeiros lançamentos ficou acima" in w and "22/07" in w for w in res.warnings), res.warnings)
         self.assertFalse(any("Nenhuma transação" in w for w in res.warnings))
 
     def test_screenshot_without_any_date_header_explains_why(self):
