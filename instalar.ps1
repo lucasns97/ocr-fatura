@@ -43,6 +43,7 @@ function Install-FaturaOcr {
     if ($running) { throw 'O Fatura OCR esta aberto. Feche a janela dele e rode o instalador de novo.' }
     $src = $PSScriptRoot
     $tmp = $null
+    $ver = $null
     # Rodando da pasta ja instalada (ou sem pasta, via "irm | iex"): baixa a versao mais recente.
     $isInstalled = $src -and ((Resolve-Path $src).Path.TrimEnd('\') -eq $Dest.TrimEnd('\'))
     if (-not $src -or $isInstalled -or -not (Test-Path (Join-Path $src 'pyproject.toml'))) {
@@ -50,7 +51,16 @@ function Install-FaturaOcr {
         $tmp = Join-Path $env:TEMP ('fatura-ocr-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $tmp | Out-Null
         $zip = Join-Path $tmp 'app.zip'
-        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$Repo/archive/refs/heads/main.zip" -OutFile $zip
+        # a versao mais recente publicada (o CI publica uma a cada mudanca aprovada); o atalho compara
+        # com ela para oferecer atualizacao. Sem versao publicada (ou sem acesso a API), baixa o main.
+        # o atalho passa a versao que ofereceu ao usuario (instala exatamente essa)
+        if ($env:FATURA_OCR_TAG -cmatch '^v\d+\.\d+\.\d+$') { $ver = $env:FATURA_OCR_TAG } else {
+            try { $ver = (Invoke-RestMethod -UseBasicParsing -TimeoutSec 20 -Uri "https://api.github.com/repos/$Repo/releases/latest").tag_name } catch { $ver = $null }
+            if ($ver -cnotmatch '^v\d+\.\d+\.\d+$') { $ver = $null }
+        }
+        $ref = if ($ver) { "refs/tags/$ver" } else { 'refs/heads/main' }
+        if ($ver) { Write-Host "Versao $ver" }
+        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$Repo/archive/$ref.zip" -OutFile $zip
         Expand-Archive -Path $zip -DestinationPath $tmp -Force
         $src = (Get-ChildItem $tmp -Directory | Select-Object -First 1).FullName
     }
@@ -60,6 +70,8 @@ function Install-FaturaOcr {
     Get-ChildItem $src -Force | Where-Object { $_.Name -notin @('.git', '.venv') } |
         Copy-Item -Destination $Dest -Recurse -Force
     if ($tmp) { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+    # versao instalada (so quando baixada do GitHub; instalando de uma copia local, fica desconhecida)
+    if ($ver) { Set-Content -Path (Join-Path $Dest 'VERSION') -Value $ver -Encoding Ascii }
 
     # 3. Python + dependencias
     Step 'Instalando o Python e as dependencias (a primeira vez leva alguns minutos)'
@@ -71,21 +83,36 @@ function Install-FaturaOcr {
 
     # 4. atalhos
     Step 'Criando os atalhos'
+    # O Windows guarda o icone em cache pelo caminho do arquivo: com o mesmo caminho, um icone novo
+    # continuava aparecendo o antigo (mesmo apagando o atalho). O nome leva um pedaco do hash do
+    # conteudo, entao um icone novo tem um caminho novo.
+    $ico = Join-Path $Dest 'assets\fatura.ico'
+    # (se o hash ou a copia falhar, usa o caminho fixo: um icone velho nao deve impedir a instalacao)
+    $icoLnk = $ico
+    try {
+        $icoTag = (Get-FileHash -Algorithm SHA256 -Path $ico).Hash.Substring(0, 8).ToLower()
+        $icoLnk = Join-Path $Dest "assets\fatura-$icoTag.ico"
+        Copy-Item -Path $ico -Destination $icoLnk -Force
+    } catch { $icoLnk = $ico }
     $shell = New-Object -ComObject WScript.Shell
     foreach ($dir in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
         if (-not $dir) { continue }
         $lnk = $shell.CreateShortcut((Join-Path $dir 'Fatura OCR.lnk'))
         $lnk.TargetPath = Join-Path $Dest 'iniciar.cmd'
         $lnk.WorkingDirectory = $Dest
-        $lnk.IconLocation = (Join-Path $Dest 'assets\fatura.ico') + ',0'
+        $lnk.IconLocation = $icoLnk + ',0'
         $lnk.Description = 'Fatura OCR: capturas da fatura para CSV'
         $lnk.Save()
         Write-Host "Atalho criado em $dir"
     }
+    # pede ao Windows para redesenhar os icones (Windows 10/11); se nao existir, o icone novo aparece depois
+    $ie4 = Join-Path $env:SystemRoot 'System32\ie4uinit.exe'
+    if (Test-Path $ie4) { try { & $ie4 -show; $global:LASTEXITCODE = 0 } catch { } }
 
     Write-Host ''
     Write-Host 'Pronto! Para abrir, use o atalho "Fatura OCR" na Area de Trabalho ou no Menu Iniciar.' -ForegroundColor Green
     if ($env:CI) { return }   # CI (GitHub Actions): sem pergunta
+    if ($env:FATURA_OCR_UPDATING) { return }   # atualizacao pedida pelo atalho: ele mesmo abre a versao nova
     $answer = Read-Host 'Abrir o Fatura OCR agora? [S/n]'
     if ($answer -notmatch '^[nN]') { Start-Process -FilePath (Join-Path $Dest 'iniciar.cmd') }
 }

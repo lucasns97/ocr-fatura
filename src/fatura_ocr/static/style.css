@@ -39,6 +39,8 @@ body::before { content: ""; position: fixed; inset: -10vmax; z-index: -1; pointe
   background: radial-gradient(38vmax 30vmax at 12% 18%, var(--aurora-1), transparent 70%),
               radial-gradient(42vmax 34vmax at 88% 12%, var(--aurora-2), transparent 70%),
               radial-gradient(40vmax 32vmax at 70% 92%, var(--aurora-3), transparent 70%); }
+.ver { font-size: 12px; color: var(--text-3); align-self: flex-end; margin-bottom: 3px; }
+.ver:empty { display: none; }
 h1 { font-size: 20px; margin: 0; letter-spacing: -.02em; }
 h2 { font-size: 16px; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px;

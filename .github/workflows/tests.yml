@@ -46,7 +46,28 @@ jobs:
         run: |
           uv sync --frozen
           uv run --frozen python -W ignore::DeprecationWarning -m unittest discover -s tests -p "test_*.py"
-      - name: Run instalar.ps1 from the checkout
+      - name: Install the latest release via "irm | iex" and update in place (not on PRs)
+        if: github.event_name != 'pull_request'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $app = Join-Path $env:LOCALAPPDATA 'FaturaOCR'
+          Get-Content -Raw .\instalar.ps1 | iex
+          if (-not (Test-Path "$app\iniciar.cmd")) { throw 'irm|iex install did not create iniciar.cmd' }
+          # versao instalada (o atalho compara com a ultima publicada): obrigatoria quando ja ha versao publicada
+          $rel = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=1" --jq '.[0].tag_name // empty'
+          $ver = if (Test-Path "$app\VERSION") { (Get-Content -Raw "$app\VERSION").Trim() } else { '' }
+          if ($rel -and $ver -and $ver -cne $rel) { throw "VERSION is '$ver', latest release is '$rel'" }
+          if ($rel -and -not $ver) { Write-Host "::warning::installer could not read the latest release (API limit?); installed main without VERSION" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File "$app\instalar.ps1"
+          foreach ($f in 'iniciar.cmd', 'pyproject.toml', 'assets\fatura.ico', '.venv') {
+            if (-not (Test-Path (Join-Path $app $f))) { throw "update in place lost $f" }
+          }
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Fatura OCR.lnk'
+          $icon = ((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).IconLocation -split ',')[0]
+          if ($icon -cnotmatch 'fatura-[0-9a-f]{8}\.ico$' -or -not (Test-Path $icon)) { throw "update lost versioned icon: $icon" }
+      - name: Run instalar.ps1 from the checkout (the code under test; replaces any earlier install)
         shell: powershell
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar.ps1
@@ -56,19 +77,11 @@ jobs:
           }
           $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Fatura OCR.lnk'
           if (-not (Test-Path $lnk)) { throw 'desktop shortcut missing' }
+          # icone versionado pelo conteudo (o cache de icones do Windows e por caminho)
+          $icon = ((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).IconLocation -split ',')[0]
+          if ($icon -cnotmatch 'fatura-[0-9a-f]{8}\.ico$' -or -not (Test-Path $icon)) { throw "shortcut icon not versioned: $icon" }
           $mb = (Get-ChildItem $app -Recurse -Force -File | Measure-Object Length -Sum).Sum / 1MB
           Write-Host ('Installed size: {0:N0} MB' -f $mb)
-      - name: Install via "irm | iex" and update in place (downloads main, so not on PRs)
-        if: github.event_name != 'pull_request'
-        shell: powershell
-        run: |
-          $app = Join-Path $env:LOCALAPPDATA 'FaturaOCR'
-          Get-Content -Raw .\instalar.ps1 | iex
-          if (-not (Test-Path "$app\iniciar.cmd")) { throw 'irm|iex install did not create iniciar.cmd' }
-          powershell -NoProfile -ExecutionPolicy Bypass -File "$app\instalar.ps1"
-          foreach ($f in 'iniciar.cmd', 'pyproject.toml', 'assets\fatura.ico', '.venv') {
-            if (-not (Test-Path (Join-Path $app $f))) { throw "update in place lost $f" }
-          }
       - name: Start with iniciar.ps1 and load the page
         shell: powershell
         run: |
@@ -83,8 +96,77 @@ jobs:
           Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           if (-not $ok) { throw 'the app did not answer on http://127.0.0.1:8765/' }
           Write-Host 'App answered on http://127.0.0.1:8765/'
+      - name: Update from the launcher (once a release exists)
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $rel = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=1" --jq '.[0].tag_name // empty'
+          if (-not $rel) { Write-Host 'No release yet: skipping the launcher update test.'; exit 0 }
+          # a consulta do instalador/atalho e sem login (limite de 60 por hora por endereco): sem cota, so avisa
+          $left = 0
+          try { $left = (Invoke-RestMethod -UseBasicParsing https://api.github.com/rate_limit).resources.core.remaining } catch { }
+          if ($left -lt 5) { Write-Host "::warning::GitHub API limit used up on this runner: skipping the launcher update test"; exit 0 }
+          $app = Join-Path $env:LOCALAPPDATA 'FaturaOCR'
+          Set-Content -Path "$app\VERSION" -Value 'v0.0.0' -Encoding Ascii   # finge uma versao antiga
+          # sem CI (senao o atalho nao consulta); "sim" automatico no lugar da pergunta
+          Remove-Item Env:CI -ErrorAction SilentlyContinue
+          $env:FATURA_OCR_ASSUME_UPDATE = '1'
+          $p = Start-Process cmd.exe -ArgumentList '/c', "`"$app\iniciar.cmd`" --no-browser" -PassThru
+          $ok = $false
+          foreach ($i in 1..90) {
+            Start-Sleep -Seconds 2
+            try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/ -TimeoutSec 5; if ($r.Content -match 'Fatura OCR') { $ok = $true; break } } catch {}
+          }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process python, powershell -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $PID } | Stop-Process -Force -ErrorAction SilentlyContinue
+          $ver = (Get-Content -Raw "$app\VERSION").Trim()
+          if ($ver -cne $rel) { throw "launcher update left VERSION '$ver' (expected $rel)" }
+          if (-not $ok) { throw 'the updated app did not answer on http://127.0.0.1:8765/' }
+          if ($r.Content -notmatch [regex]::Escape($rel)) { throw "page does not show $rel" }
+          Write-Host "Launcher updated v0.0.0 -> $rel and the new version answered"
       - name: Run desinstalar.ps1
         shell: powershell
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\FaturaOCR\desinstalar.ps1"
           if (Test-Path (Join-Path $env:LOCALAPPDATA 'FaturaOCR')) { throw 'uninstall left the app folder' }
+
+  # Each merge to main whose tests passed becomes a release (v1.0.0, v1.0.1, ...). The installer downloads the
+  # latest release and writes its tag to VERSION; the launcher compares it with the latest release and offers
+  # to update. Notes = the merged PR's title.
+  release:
+    name: Publish the next version
+    needs: [verify, windows]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - name: Tag and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # an older run finishing late must not release an outdated commit: only main's current head
+          head=$(gh api "repos/$R/commits/main" --jq .sha)
+          if [ "$head" != "$SHA" ]; then echo "main moved on ($head); its own run releases it"; exit 0; fi
+          # a list answers [] when there is no release yet; any other error stops the job (set -e)
+          last=$(gh api "repos/$R/releases?per_page=1" --jq '.[0].tag_name // empty')
+          if [ -n "$last" ] && [ "$(gh api "repos/$R/commits/$last" --jq .sha)" = "$SHA" ]; then
+            echo "already released as $last"; exit 0
+          fi
+          if [[ "$last" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            next="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+          else
+            next="v1.0.0"
+          fi
+          title=$(gh api "repos/$R/commits/$SHA/pulls" --jq '.[0].title // empty') || title=""
+          [ -n "$title" ] || title=$(gh api "repos/$R/commits/$SHA" --jq '.commit.message' | head -n 1)
+          gh release create "$next" --repo "$R" --target "$SHA" --title "$next" --notes "$title"
+          echo "released $next ($SHA): $title"
