@@ -75,9 +75,13 @@ function Install-FaturaOcr {
     # continuava aparecendo o antigo (mesmo apagando o atalho). O nome leva um pedaco do hash do
     # conteudo, entao um icone novo tem um caminho novo.
     $ico = Join-Path $Dest 'assets\fatura.ico'
-    $icoTag = (Get-FileHash -Algorithm SHA256 -Path $ico).Hash.Substring(0, 8).ToLower()
-    $icoLnk = Join-Path $Dest "assets\fatura-$icoTag.ico"
-    Copy-Item -Path $ico -Destination $icoLnk -Force
+    # (se o hash ou a copia falhar, usa o caminho fixo: um icone velho nao deve impedir a instalacao)
+    $icoLnk = $ico
+    try {
+        $icoTag = (Get-FileHash -Algorithm SHA256 -Path $ico).Hash.Substring(0, 8).ToLower()
+        $icoLnk = Join-Path $Dest "assets\fatura-$icoTag.ico"
+        Copy-Item -Path $ico -Destination $icoLnk -Force
+    } catch { $icoLnk = $ico }
     $shell = New-Object -ComObject WScript.Shell
     foreach ($dir in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
         if (-not $dir) { continue }
@@ -91,7 +95,7 @@ function Install-FaturaOcr {
     }
     # pede ao Windows para redesenhar os icones (Windows 10/11); se nao existir, o icone novo aparece depois
     $ie4 = Join-Path $env:SystemRoot 'System32\ie4uinit.exe'
-    if (Test-Path $ie4) { try { & $ie4 -show } catch { } }
+    if (Test-Path $ie4) { try { & $ie4 -show; $global:LASTEXITCODE = 0 } catch { } }
 
     Write-Host ''
     Write-Host 'Pronto! Para abrir, use o atalho "Fatura OCR" na Area de Trabalho ou no Menu Iniciar.' -ForegroundColor Green

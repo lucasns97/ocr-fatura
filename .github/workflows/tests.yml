@@ -58,7 +58,7 @@ jobs:
           if (-not (Test-Path $lnk)) { throw 'desktop shortcut missing' }
           # icone versionado pelo conteudo (o cache de icones do Windows e por caminho)
           $icon = ((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).IconLocation -split ',')[0]
-          if ($icon -notmatch 'fatura-[0-9a-f]{8}\.ico$' -or -not (Test-Path $icon)) { throw "shortcut icon not versioned: $icon" }
+          if ($icon -cnotmatch 'fatura-[0-9a-f]{8}\.ico$' -or -not (Test-Path $icon)) { throw "shortcut icon not versioned: $icon" }
           $mb = (Get-ChildItem $app -Recurse -Force -File | Measure-Object Length -Sum).Sum / 1MB
           Write-Host ('Installed size: {0:N0} MB' -f $mb)
       - name: Install via "irm | iex" and update in place (downloads main, so not on PRs)
@@ -72,6 +72,9 @@ jobs:
           foreach ($f in 'iniciar.cmd', 'pyproject.toml', 'assets\fatura.ico', '.venv') {
             if (-not (Test-Path (Join-Path $app $f))) { throw "update in place lost $f" }
           }
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Fatura OCR.lnk'
+          $icon = ((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).IconLocation -split ',')[0]
+          if ($icon -cnotmatch 'fatura-[0-9a-f]{8}\.ico$' -or -not (Test-Path $icon)) { throw "update lost versioned icon: $icon" }
       - name: Start with iniciar.ps1 and load the page
         shell: powershell
         run: |
