@@ -15,6 +15,21 @@ function Ui-Fit([string]$s, [int]$n) {
     return $s.PadRight($n)
 }
 
+# O logo de blocos (6 linhas) ja com os caracteres de verdade; separado para o CI conferir a troca.
+function Ui-BlockLogo {
+    $blocks = @(
+        '#######7 #####7 ########7##7   ##7######7  #####7      ######7  ######7######7',
+        '##F====J##F==##7L==##F==J##|   ##|##F==##7##F==##7    ##F===##7##F====J##F==##7',
+        '#####7  #######|   ##|   ##|   ##|######FJ#######|    ##|   ##|##|     ######FJ',
+        '##F==J  ##F==##|   ##|   ##|   ##|##F==##7##F==##|    ##|   ##|##|     ##F==##7',
+        '##|     ##|  ##|   ##|   L######FJ##|  ##|##|  ##|    L######FJL######7##|  ##|',
+        'L=J     L=J  L=J   L=J    L=====J L=J  L=JL=J  L=J     L=====J  L=====JL=J  L=J'
+    )
+    $map = @{ [char]'#' = [char]0x2588; [char]'7' = [char]0x2557; [char]'F' = [char]0x2554; [char]'=' = [char]0x2550
+              [char]'|' = [char]0x2551; [char]'L' = [char]0x255A; [char]'J' = [char]0x255D }
+    return @($blocks | ForEach-Object { -join ($_.ToCharArray() | ForEach-Object { if ($map.ContainsKey($_)) { $map[$_] } else { $_ } }) })
+}
+
 function Ui-Banner {
     $logo = @(
         ' _____ _  _____ _   _ ____      _       ___   ____ ____  ',
@@ -26,20 +41,10 @@ function Ui-Banner {
     # Logo de blocos solidos (escolha do dono). Guardado em ASCII e trocado na hora pelos caracteres de bloco
     # e de borda dupla: o arquivo continua ASCII (sem BOM, funciona via "irm | iex"). So com console de verdade
     # e janela larga o bastante; senao fica o logo ASCII acima (uma linha que quebra estraga o desenho).
-    $blocks = @(
-        '#######7 #####7 ########7##7   ##7######7  #####7      ######7  ######7######7',
-        '##F====J##F==##7L==##F==J##|   ##|##F==##7##F==##7    ##F===##7##F====J##F==##7',
-        '#####7  #######|   ##|   ##|   ##|######FJ#######|    ##|   ##|##|     ######FJ',
-        '##F==J  ##F==##|   ##|   ##|   ##|##F==##7##F==##|    ##|   ##|##|     ##F==##7',
-        '##|     ##|  ##|   ##|   L######FJ##|  ##|##|  ##|    L######FJL######7##|  ##|',
-        'L=J     L=J  L=J   L=J    L=====J L=J  L=JL=J  L=J     L=====J  L=====JL=J  L=J'
-    )
     $wide = 0; try { $wide = [Console]::WindowWidth } catch { }
-    if ($global:FUiFancy -and $wide -gt ($blocks[0].Length + 2)) {
-        $map = @{ [char]'#' = [char]0x2588; [char]'7' = [char]0x2557; [char]'F' = [char]0x2554; [char]'=' = [char]0x2550
-                  [char]'|' = [char]0x2551; [char]'L' = [char]0x255A; [char]'J' = [char]0x255D }
-        $logo = @($blocks | ForEach-Object { -join ($_.ToCharArray() | ForEach-Object { if ($map.ContainsKey($_)) { $map[$_] } else { $_ } }) })
-    }
+    $block = Ui-BlockLogo
+    $need = ($block | Measure-Object -Property Length -Maximum).Maximum
+    if ($global:FUiFancy -and $wide -gt $need + 1) { $logo = $block }
     Write-Host ''
     if ($global:FUiFancy) {
         # chuva de 0 e 1 por um instante, depois o logo aparece linha a linha

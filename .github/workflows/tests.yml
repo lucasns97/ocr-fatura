@@ -54,6 +54,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           . .\ui.ps1
           Ui-Banner
+          # o logo de blocos (so desenhado com janela larga; aqui nao ha janela): confere a troca dos caracteres
+          $b = Ui-BlockLogo
+          if ($b.Count -ne 6 -or ($b -join '') -match '[#7F=|LJ]' -or $b[0][0] -ne [char]0x2588) { throw 'block logo mapping broken' }
           Ui-Ok 'passo rapido'
           Ui-Process 'processo' 'cmd.exe' '/c echo linha 1 & ping -n 3 127.0.0.1 >nul & echo linha final'
           $f = Join-Path $env:TEMP 'ui-download-test.txt'
