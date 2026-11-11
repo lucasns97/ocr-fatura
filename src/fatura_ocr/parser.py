@@ -47,8 +47,9 @@ INSTALL_RE = re.compile(r"Parcela\s*(\d+)\s*de\s*(\d+)", re.I)
 # última dessas linhas é ignorado. Aplicado a plain(texto).
 CARD_RE = re.compile(r"dia de vencimento|resumo da fatura|exportar fatura|despesas da fatura|pagamento minimo")
 # Botões fixos no rodapé da fatura em aberto ("Pagar com a Conta Inter", "Parcelar fatura"): não são
-# texto de transação (sem isso, viravam parte do nome do último estabelecimento). Aplicado a plain(texto).
-FOOTER_RE = re.compile(r"^(pagar com a conta|pagar fatura|parcelar fatura|antecipar parcelas)")
+# texto de transação (sem isso, viravam parte do nome do último estabelecimento). Aplicado a plain(texto)
+# SEM espaços: o OCR costuma ler esses botões grudados ("Pagarcoma ContaInter", "Parcelarfatura").
+FOOTER_RE = re.compile(r"^(pagarcomaconta|pagarfatura|parcelarfatura|anteciparparcelas)")
 CARD_MONTH_RE = re.compile(r"^(" + "|".join(MONTH_NAMES).replace("ç", "c") + r")\b")  # aplicado a plain(texto)
 
 
@@ -128,7 +129,7 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
             break
     # margens com barra de status/navegação; pedaços do meio de uma captura rolada não têm
     lo, hi = (TOP_CUT * height if cut_top else -1), (BOTTOM_CUT * height if cut_bottom else height + 1)
-    body = [ln for ln in lines if lo < ln.y < hi and not FOOTER_RE.match(plain(ln.text.strip()))]
+    body = [ln for ln in lines if lo < ln.y < hi and not FOOTER_RE.match(re.sub(r"\s+", "", plain(ln.text)))]
     card = [i for i, ln in enumerate(body) if CARD_RE.search(plain(ln.text))]
     if card:
         # captura do topo da lista: o cartão-resumo não é transação, e nada aqui herda a data anterior

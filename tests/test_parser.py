@@ -56,7 +56,7 @@ class Parser(unittest.TestCase):
                        *tx("", "Drogaria", "+R$ 111,33", "PG FARMACIA EXEMPLO"),
                        *tx("", "Outros", "-R$ 122,91", "REV CR PARC LOJ PARCEL"),
                        *tx("Quarta, 22 de jul", "Vestuário", "-R$ 80,00", "LOJA DE ROUPA FICTICIA"),
-                       "Pagar com a Conta Inter", "Parcelar fatura")
+                       "Pagarcoma ContaInter", "Parcelarfatura")  # como o OCR leu os botões numa captura real
         res = parse_screen(lines, H)
         self.assertEqual([(r.day, r.month, r.amount) for r in res.rows],
                          [(22, 7, 10445), (22, 7, -11133), (22, 7, 12291), (22, 7, 8000)])
