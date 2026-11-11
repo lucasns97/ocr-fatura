@@ -209,11 +209,11 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
             screens.append(sr.rows)
             screen_image.append(i)
         if estimated:
-            n = "1 lançamento" if estimated == 1 else f"{estimated} lançamentos"
+            n = "do lançamento" if estimated == 1 else f"dos {estimated} primeiros lançamentos"
+            when = f" ({guess[0]:02d}/{guess[1]:02d})" if guess else ""
             res.warnings.append(
-                f"Imagem {i + 1}: {n} no topo da captura sem o título do dia (ele ficou acima da tela). "
-                f"Usamos a data do primeiro dia visível como estimativa (a data real é essa ou posterior) "
-                f"e marcamos com ⚠ revisar: confira a data, ou envie também a captura de cima.")
+                f"Imagem {i + 1}: o dia {n} ficou acima da captura. Usamos o primeiro dia visível{when}; "
+                f"a data real é essa ou uma posterior. Para ter a data certa, envie também a captura de cima.")
         if not found and no_header:
             res.warnings.append(
                 f"Imagem {i + 1}: há valores, mas nenhum título de dia (ex.: \"Quarta, 22 de jul\") aparece na captura, "
