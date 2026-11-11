@@ -14,7 +14,7 @@ Set-Location $env:TEMP
 [Environment]::CurrentDirectory = $env:TEMP
 if (Test-Path $Dest) { Remove-Item $Dest -Recurse -Force -ErrorAction SilentlyContinue }
 if (Test-Path $Dest) {
-    Write-Host 'Quase tudo removido. Reinicie o computador e abra o desinstalador de novo para terminar.' -ForegroundColor Yellow
+    Write-Host "Quase tudo removido. Reinicie o computador e depois apague a pasta $Dest (cole esse endereco na barra do Explorador de Arquivos)." -ForegroundColor Yellow
 } else {
     Write-Host 'Fatura OCR removido. Os nomes de lojas que voce corrigiu ficam guardados, caso instale de novo.' -ForegroundColor Green
 }

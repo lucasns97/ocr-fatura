@@ -84,10 +84,10 @@ function Install-FaturaOcr {
 
     # 3. Python + dependencias
     Step 3 'Instalando os componentes'
-    Detail 'Na primeira vez leva alguns minutos; pode deixar rodando.'
+    Detail 'Na primeira vez leva alguns minutos; pode deixar rodando, mesmo se parecer parado.'
     Push-Location $Dest
     try {
-        & uv sync --frozen --no-dev --quiet   # lista de pacotes escondida; erros continuam aparecendo
+        & uv sync --frozen --no-dev   # mostra o andamento: sem ele a tela parece travada por minutos
         if ($LASTEXITCODE -ne 0) { throw "A instalacao dos componentes falhou (codigo $LASTEXITCODE)." }
     } finally { Pop-Location }
 
@@ -123,7 +123,9 @@ function Install-FaturaOcr {
     if (Test-Path $ie4) { try { & $ie4 -show; $global:LASTEXITCODE = 0 } catch { } }
     # e avisa o Explorer que icones mudaram (SHCNE_ASSOCCHANGED): a Area de Trabalho redesenha os atalhos
     try {
-        Add-Type -Namespace FaturaOcr -Name Shell -MemberDefinition '[DllImport("shell32.dll")] public static extern void SHChangeNotify(int e, uint f, IntPtr a, IntPtr b);'
+        if (-not ('FaturaOcr.Shell' -as [type])) {   # segunda instalacao na mesma janela: o tipo ja existe
+            Add-Type -Namespace FaturaOcr -Name Shell -MemberDefinition '[DllImport("shell32.dll")] public static extern void SHChangeNotify(int e, uint f, IntPtr a, IntPtr b);'
+        }
         [FaturaOcr.Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
     } catch { }
 

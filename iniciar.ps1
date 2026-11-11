@@ -68,7 +68,7 @@ Write-Host '  O Fatura OCR esta abrindo no seu navegador.' -ForegroundColor Yell
 Write-Host '  NAO feche esta janela enquanto estiver usando.' -ForegroundColor Yellow
 Write-Host '  Terminou? Pode fechar esta janela.' -ForegroundColor Yellow
 Write-Host $bar -ForegroundColor Yellow
-& uv run --quiet --frozen --no-dev fatura @args
+& uv run --frozen --no-dev fatura @args
 if ($LASTEXITCODE -ne 0) {
     Write-Host "O Fatura OCR fechou com um erro (codigo $LASTEXITCODE)." -ForegroundColor Red
     Write-Host 'Tente abrir o atalho de novo. Se continuar, abra o instalador de novo.'
