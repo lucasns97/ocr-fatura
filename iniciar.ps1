@@ -99,31 +99,34 @@ if ($args.Count) { $argLine += ' ' + (($args | ForEach-Object { if ($_ -match '\
 $p = Start-Process -FilePath (Get-Command uv).Source -ArgumentList $argLine -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
 $null = $p.Handle   # sem isso o ExitCode pode vir vazio no PowerShell 5
 $B = [string][char]0x2588
+# Painel em linhas fixas: 0 = "iniciando", 2 = linha ao vivo (ONLINE...), 4 = aviso, 5 = endereco.
+# O aviso e o endereco ficam embaixo, parados; so as linhas 0 e 2 sao redesenhadas no lugar.
+foreach ($i in 0..6) { Write-Host '' }
+$base = 0; try { $base = [Console]::CursorTop - 7 } catch { }
+function Go([int]$row) { try { [Console]::SetCursorPosition(0, $base + $row) } catch { } }
+function Footer([string]$url) {
+    Go 4; Write-Host '  NAO feche esta janela enquanto usa o Fatura OCR.' -ForegroundColor Yellow
+    if ($url) { Go 5; Write-Host -NoNewline '  Se o navegador nao abrir, use: ' -ForegroundColor DarkGray; Write-Host $url -ForegroundColor Gray }
+}
 try {
     Ui-Cursor $false
     $url = $null; $t = 0
+    Footer $null   # o aviso aparece ja, antes de o servidor responder
     $sw = [Diagnostics.Stopwatch]::StartNew()
     while (-not $p.HasExited) {
         if (-not $url) {
             $m = Select-String -Path $log -Pattern 'http://127\.0\.0\.1:\d+/' -Encoding UTF8 -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($m) {
-                $url = $m.Matches[0].Value
-                # o navegador ja vai abrir: o aviso mais importante aparece agora, nao so quando o servidor responder
-                Ui-Line 'iniciando' '' 'DarkGreen'
-                Write-Host ("`r  NAO feche esta janela enquanto usa o Fatura OCR.".PadRight(78)) -ForegroundColor Yellow
-            }
+            if ($m) { $url = $m.Matches[0].Value; Footer $url }
         }
         if ($url -and $t % 4 -eq 0) {
             try { if ((Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2).StatusCode -eq 200) { break } } catch { }
         }
-        Ui-Line 'iniciando' ((Ui-Scanner $t) + ('  {0:N0}s' -f $sw.Elapsed.TotalSeconds)) 'DarkGreen'
+        Go 0; Ui-Line 'iniciando' ((Ui-Scanner $t) + ('  {0:N0}s' -f $sw.Elapsed.TotalSeconds)) 'DarkGreen'
         Start-Sleep -Milliseconds 150
         $t++
     }
     if (-not $p.HasExited) {
-        Ui-Ok 'iniciando' 'ONLINE'
-        Write-Host "  $url" -ForegroundColor DarkGray
-        Write-Host ''
+        Go 0; Ui-Ok 'iniciando' 'ONLINE'
         $sw.Restart(); $ping = '...'; $next = 0
         while (-not $p.HasExited) {
             if ($sw.Elapsed.TotalSeconds -ge $next) {
@@ -131,7 +134,8 @@ try {
                 $q = [Diagnostics.Stopwatch]::StartNew()
                 try { $null = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2; $ping = "$($q.ElapsedMilliseconds) ms" } catch { $ping = 'sem resposta' }
             }
-            Write-Host -NoNewline "`r  "
+            Go 2
+            Write-Host -NoNewline '  '
             Write-Host -NoNewline $B -ForegroundColor $(if ($t % 8 -lt 4) { 'Green' } else { 'DarkGreen' })
             Write-Host -NoNewline ' ONLINE  ' -ForegroundColor Green
             Write-Host -NoNewline ('{0:hh\:mm\:ss}  ' -f $sw.Elapsed) -ForegroundColor Gray
@@ -141,6 +145,7 @@ try {
             $t++
         }
     }
+    Go 7   # mensagens depois do painel
     # o servidor parou sozinho (erro): mostra o fim do log e o que fazer
     $p.WaitForExit()
     Ui-Cursor $true
