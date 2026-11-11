@@ -72,6 +72,25 @@ class RealOcr(unittest.TestCase):
         self.assertEqual(sum(r["data"] == "27/08/2026" for r in res.rows), 3)
         self.assertFalse([r for r in res.rows if r["revisar"]])
 
+    def test_open_invoice_screenshot_starting_mid_day(self):
+        """Captura única da fatura em aberto que começa no meio de um dia (sem título de data acima) e tem os
+        botões "Pagar com a Conta Inter" / "Parcelar fatura" no rodapé: antes não saía nenhuma linha."""
+        from fatura_ocr.aliases import AliasStore
+        from fatura_ocr.pipeline import process_images
+        png = render_screenshot([
+            ("", [("Saúde", "-R$ 104,45", "CLINICA FICTICIA SAO PAULO BRA", "Parcela 2 de 3"),
+                  ("Drogaria", "+R$ 111,33", "PG FARMACIA EXEMPLO SAO PAULO", "")]),
+            ("Quarta, 22 de jul", [("Vestuário", "-R$ 80,00", "LOJA DE ROUPA FICTICIA", "")]),
+        ], top=160, footer=["Pagar com a Conta Inter", "Parcelar fatura"])
+        with tempfile.TemporaryDirectory() as tmp:
+            res = process_images([png], 2026, 8, None, None, AliasStore(Path(tmp) / "a.json"))
+        self.assertEqual([(r["data"], r["valor"], r["tipo"], r["revisar"]) for r in res.rows], [
+            ("22/07/2026", "R$ 104,45", "Parcela 2 de 3", True),
+            ("22/07/2026", "-R$ 111,33", "Compra à vista", True),
+            ("22/07/2026", "R$ 80,00", "Compra à vista", False)])
+        self.assertNotIn("Pagar", res.rows[2]["lancamento"])
+        self.assertTrue(any("estimativa" in w for w in res.warnings), res.warnings)
+
     def test_low_resolution_image_is_flagged(self):
         from fatura_ocr.aliases import AliasStore
         from fatura_ocr.pipeline import process_images

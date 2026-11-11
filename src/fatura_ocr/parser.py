@@ -46,6 +46,9 @@ INSTALL_RE = re.compile(r"Parcela\s*(\d+)\s*de\s*(\d+)", re.I)
 # "Resumo da fatura", "Exportar fatura", "Despesas da fatura"). Não são transações: tudo até a
 # última dessas linhas é ignorado. Aplicado a plain(texto).
 CARD_RE = re.compile(r"dia de vencimento|resumo da fatura|exportar fatura|despesas da fatura|pagamento minimo")
+# Botões fixos no rodapé da fatura em aberto ("Pagar com a Conta Inter", "Parcelar fatura"): não são
+# texto de transação (sem isso, viravam parte do nome do último estabelecimento). Aplicado a plain(texto).
+FOOTER_RE = re.compile(r"^(pagar com a conta|pagar fatura|parcelar fatura|antecipar parcelas)")
 CARD_MONTH_RE = re.compile(r"^(" + "|".join(MONTH_NAMES).replace("ç", "c") + r")\b")  # aplicado a plain(texto)
 
 
@@ -88,6 +91,8 @@ class ScreenResult:
     card_month: int | None = None   # mês do cartão "Setembro" no topo da 1ª captura, se visível
     last_date: tuple[int, int] | None = None  # última data vista; vale para o topo da próxima captura
     headers: list[tuple[float, tuple[int, int]]] = field(default_factory=list)  # (y, data) de cada cabeçalho
+    estimated: int = 0              # linhas do topo sem cabeçalho acima: data estimada pelo primeiro abaixo
+    no_header: int = 0              # valores encontrados sem nenhum cabeçalho de data na captura
 
 
 def group_lines(boxes: list[tuple[float, float, str, float]], height: float) -> list[OcrLine]:
@@ -123,7 +128,7 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
             break
     # margens com barra de status/navegação; pedaços do meio de uma captura rolada não têm
     lo, hi = (TOP_CUT * height if cut_top else -1), (BOTTOM_CUT * height if cut_bottom else height + 1)
-    body = [ln for ln in lines if lo < ln.y < hi]
+    body = [ln for ln in lines if lo < ln.y < hi and not FOOTER_RE.match(plain(ln.text.strip()))]
     card = [i for i, ln in enumerate(body) if CARD_RE.search(plain(ln.text))]
     if card:
         # captura do topo da lista: o cartão-resumo não é transação, e nada aqui herda a data anterior
@@ -131,6 +136,16 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
         start_date = None
     date = start_date
     saw_header = False
+    guessing = False
+    if date is None:
+        # primeira captura começando no meio de um dia: o cabeçalho dele ficou acima da tela. A lista vai
+        # da compra mais nova para a mais antiga, então a data real é a do primeiro cabeçalho visível
+        # ou posterior: usamos esse dia como estimativa e a linha sai marcada "revisar" (sem cabeçalho visto)
+        for ln in body:
+            d = DATE_RE.match(ln.text.strip())
+            if d and MONTHS.get(plain(d.group(3))):
+                date, guessing = (int(d.group(2)), MONTHS[plain(d.group(3))]), True
+                break
     for i, ln in enumerate(body):
         text = ln.text.strip()
         d = DATE_RE.match(text)
@@ -142,6 +157,8 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
             saw_header = True
             continue
         a = AMOUNT_RE.search(text)
+        if a and date is None and i > 0:
+            res.no_header += 1
         if not (a and date and i > 0):
             continue
         try:
@@ -166,6 +183,8 @@ def parse_screen(lines: list[OcrLine], height: float, screen: int = 0,
             else:
                 merchant.append(t)
                 conf = min(conf, body[nxt_i].conf)
+        if guessing and not saw_header:
+            res.estimated += 1
         res.rows.append(RawRow(date[0], date[1], category, amount, re.sub(r"\s+", " ", " ".join(merchant)).strip(),
                                installment, conf, screen))
     res.last_date = date

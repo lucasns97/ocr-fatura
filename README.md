@@ -93,6 +93,9 @@ A primeira instalação leva alguns minutos: baixa o Python e o leitor de imagen
   (e pelo total, se você informar), mas **confira a tabela antes de usar**.
 - O mesmo estabelecimento sai sempre com o mesmo nome: a primeira grafia lida (ou a que você corrigir) passa a valer
   para as próximas vezes.
+- Se a primeira captura começar no meio de um dia (o título com a data ficou acima da tela), as linhas do topo
+  recebem a data do primeiro dia visível como estimativa e saem marcadas com **⚠ revisar**. Para ter a data
+  certa, comece a captura um pouco acima, ou envie também a captura de cima.
 - A data é a que o app mostra. Em casos raros ela difere da fatura em PDF (ex.: compra listada em 31/07 no app e em 01/08 no PDF).
 - O ano é deduzido: a compra não pode ser depois do fechamento da fatura (por padrão, o último dia do mês anterior ao
   vencimento; dá para mudar em **Opções avançadas**). Em parcelas, o número da parcela ajuda a achar o ano da compra original.

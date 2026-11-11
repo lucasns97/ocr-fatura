@@ -172,7 +172,7 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
             parts = read(data, lambda k, n, i=i: progress(i, "part", frac=k / n, parts=n))
         except ValueError as e:
             raise ValueError(f"Imagem {i + 1}: {e}") from e
-        found = 0
+        found, estimated, no_header = 0, 0, 0
         headers: list[tuple[float, tuple[int, int]]] = []  # cabeçalhos de data já vistos, em y da imagem inteira
         for lines, height, cut_top, cut_bottom, y0 in parts:
             known = False
@@ -195,9 +195,21 @@ def process_images(images: list[bytes], year: int, month: int, closing: date | N
                     f"A imagem {i + 1} mostra a fatura de {MONTH_NAMES[sr.card_month - 1].capitalize()}, "
                     f"mas o mês escolhido é {MONTH_NAMES[month - 1].capitalize()}. Confira o formulário.")
             found += len(sr.rows)
+            estimated += sr.estimated
+            no_header += sr.no_header
             screens.append(sr.rows)
             screen_image.append(i)
-        if not found:
+        if estimated:
+            n = "1 lançamento" if estimated == 1 else f"{estimated} lançamentos"
+            res.warnings.append(
+                f"Imagem {i + 1}: {n} no topo da captura sem o título do dia (ele ficou acima da tela). "
+                f"Usamos a data do primeiro dia visível como estimativa (a data real é essa ou posterior) "
+                f"e marcamos com ⚠ revisar: confira a data, ou envie também a captura de cima.")
+        if not found and no_header:
+            res.warnings.append(
+                f"Imagem {i + 1}: há valores, mas nenhum título de dia (ex.: \"Quarta, 22 de jul\") aparece na captura, "
+                f"então não dá para saber a data. Envie também a captura de cima, que mostra o dia.")
+        elif not found:
             res.warnings.append(f"Nenhuma transação encontrada na imagem {i + 1}. É a tela 'Faturas' do app?")
         read_count += 1
         progress(i, "done")

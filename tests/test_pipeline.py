@@ -88,6 +88,24 @@ class Reconcile(unittest.TestCase):
 
 
 class Process(unittest.TestCase):
+    def test_single_screenshot_starting_mid_day_is_not_empty(self):
+        s = screen(*tx("", "Saúde", "-R$ 104,45", "CLINICA FICTICIA", "Parcela 2 de 3"),
+                   *tx("", "Drogaria", "+R$ 11,58", "PG FARMACIA EXEMPLO"),
+                   *tx("Quarta, 22 de jul", "Vestuário", "-R$ 80,00", "LOJA FICTICIA"))
+        with tempfile.TemporaryDirectory() as tmp:
+            res = process_images([b"1"], 2026, 8, None, None, AliasStore(Path(tmp) / "a.json"), read_lines=lambda _: (s, H))
+        self.assertEqual([(r["data"], r["valor"], r["revisar"]) for r in res.rows], [
+            ("22/07/2026", "R$ 104,45", True), ("22/07/2026", "-R$ 11,58", True), ("22/07/2026", "R$ 80,00", False)])
+        self.assertTrue(any("estimativa" in w and "Imagem 1: 2 lançamentos" in w for w in res.warnings), res.warnings)
+        self.assertFalse(any("Nenhuma transação" in w for w in res.warnings))
+
+    def test_screenshot_without_any_date_header_explains_why(self):
+        s = screen(*tx("", "Outros", "-R$ 10,00", "LOJA A"))
+        with tempfile.TemporaryDirectory() as tmp:
+            res = process_images([b"1"], 2026, 8, None, None, AliasStore(Path(tmp) / "a.json"), read_lines=lambda _: (s, H))
+        self.assertEqual(res.rows, [])
+        self.assertTrue(any("nenhum título de dia" in w for w in res.warnings), res.warnings)
+
     def test_end_to_end_with_fake_ocr(self):
         s1 = screen(*tx("Domingo, 23 de ago", "Pagamentos", "-R$ 12,34", "STREAMING ABC"),
                     *tx("Quinta, 20 de ago", "Outros", "-R$ 4,20", "IOFINTERNACIONAL"))

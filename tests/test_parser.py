@@ -40,11 +40,37 @@ class Parser(unittest.TestCase):
     def test_rows_above_first_header_use_previous_screenshot_date(self):
         # o cabeçalho de data rolou para fora da tela: a data vem da captura anterior
         lines = screen("Outros", "-R$ 10,00", "LOJA A", *tx("Segunda, 10 de ago", "Outros", "-R$ 20,00", "LOJA B"))
-        self.assertEqual([r.amount for r in parse_screen(lines, H).rows], [2000])   # sem data anterior: ignora
+        alone = parse_screen(lines, H)  # sem captura anterior: estimada pelo 1º dia visível, marcada para revisar
+        self.assertEqual([(r.day, r.amount) for r in alone.rows], [(10, 1000), (10, 2000)])
+        self.assertLessEqual(alone.rows[0].conf, UNSURE_CONF)
+        self.assertEqual(alone.estimated, 1)
         rows = parse_screen(lines, H, start_date=(12, 8)).rows
         self.assertEqual([(r.day, r.amount) for r in rows], [(12, 1000), (10, 2000)])
         self.assertLessEqual(rows[0].conf, UNSURE_CONF)   # data deduzida: marcada para revisar
         self.assertGreater(rows[1].conf, UNSURE_CONF)
+
+    def test_first_screenshot_starting_mid_day(self):
+        """Fatura em aberto, captura começando no meio da lista: o título do dia ficou acima da tela e o único
+        título visível vem depois. As linhas do topo recebem essa data (estimada) e saem para revisar."""
+        lines = screen(*tx("", "Saúde", "-R$ 104,45", "CLINICA FICTICIA SAO PAULO BRA", "Parcela 2 de 3"),
+                       *tx("", "Drogaria", "+R$ 111,33", "PG FARMACIA EXEMPLO"),
+                       *tx("", "Outros", "-R$ 122,91", "REV CR PARC LOJ PARCEL"),
+                       *tx("Quarta, 22 de jul", "Vestuário", "-R$ 80,00", "LOJA DE ROUPA FICTICIA"),
+                       "Pagar com a Conta Inter", "Parcelar fatura")
+        res = parse_screen(lines, H)
+        self.assertEqual([(r.day, r.month, r.amount) for r in res.rows],
+                         [(22, 7, 10445), (22, 7, -11133), (22, 7, 12291), (22, 7, 8000)])
+        self.assertEqual(res.estimated, 3)
+        self.assertTrue(all(r.conf <= UNSURE_CONF for r in res.rows[:3]))
+        self.assertGreater(res.rows[3].conf, UNSURE_CONF)  # abaixo do título: data certa
+        self.assertEqual(res.rows[0].installment, "2/3")
+        # os botões do rodapé não entram no nome do último estabelecimento
+        self.assertEqual(res.rows[3].merchant, "LOJA DE ROUPA FICTICIA")
+
+    def test_no_date_header_at_all(self):
+        res = parse_screen(screen(*tx("", "Outros", "-R$ 10,00", "LOJA A"), *tx("", "Outros", "-R$ 20,00", "LOJA B")), H)
+        self.assertEqual(res.rows, [])
+        self.assertEqual(res.no_header, 2)
 
     def test_summary_card_is_never_a_transaction(self):
         # tela de fatura fechada: cartão "Setembro Paga" com o total sem sinal. Mesmo herdando a data
