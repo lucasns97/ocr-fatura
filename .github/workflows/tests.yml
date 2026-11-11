@@ -104,8 +104,10 @@ jobs:
           if ($icon2 -cne $icon -or -not (Test-Path $icon2)) { throw "reinstall: shortcut icon is '$icon2'" }
           $mb = (Get-ChildItem $app -Recurse -Force -File | Measure-Object Length -Sum).Sum / 1MB
           Write-Host ('Installed size: {0:N0} MB' -f $mb)
-      - name: Start with iniciar.ps1 and load the page
+      - name: Start with iniciar.ps1 (animated panel) and load the page
         shell: powershell
+        env:
+          FATURA_OCR_FANCY: '1'   # o CI define CI=true, que desligaria a animacao: testa o caminho do usuario
         run: |
           $app = Join-Path $env:LOCALAPPDATA 'FaturaOCR'
           $p = Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"$app\iniciar.ps1",'--no-browser' -PassThru

@@ -12,7 +12,7 @@ if (-not (Get-Command Ui-Line -ErrorAction SilentlyContinue)) {
     $global:FUiFancy = $false
     function Ui-Banner { Write-Host ''; Write-Host '  FATURA OCR' -ForegroundColor Green; Write-Host '' }
     function Ui-Line([string]$label, [string]$tail, [string]$color = 'Green', [switch]$Final) { if ($Final) { Write-Host "  > $label ... $tail" -ForegroundColor $color } }
-    function Ui-Ok([string]$label, [string]$what = 'OK') { Ui-Line $label $what 'Green' -Final }
+    function Ui-Ok([string]$label, [string]$what = 'OK', [string]$color = 'Green') { Ui-Line $label $what $color -Final }
     function Ui-Scanner([int]$tick, [int]$w = 12) { return '' }
     function Ui-Cursor([bool]$on) { }
 }
@@ -89,11 +89,13 @@ if (-not $global:FUiFancy) {
 
 # Com animacao: o servidor roda por baixo (saida num arquivo temporario) e esta janela vira um painel ao vivo.
 # Tudo o que aparece e real: tempo ligado e o tempo de resposta do servidor (consultado a cada 5 s).
+# fechar a janela (o jeito normal de sair) mata esta janela antes do "finally": limpa os logs de vezes anteriores
+Get-ChildItem $env:TEMP -Filter 'fatura-ocr-*.log*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 $log = Join-Path $env:TEMP ('fatura-ocr-' + $PID + '.log')
 $env:PYTHONUNBUFFERED = '1'
 $env:PYTHONIOENCODING = 'utf-8'
 $argLine = 'run --frozen --no-dev fatura'
-if ($args.Count) { $argLine += ' ' + ($args -join ' ') }
+if ($args.Count) { $argLine += ' ' + (($args | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' ') }
 $p = Start-Process -FilePath (Get-Command uv).Source -ArgumentList $argLine -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
 $null = $p.Handle   # sem isso o ExitCode pode vir vazio no PowerShell 5
 $B = [string][char]0x2588
@@ -103,8 +105,13 @@ try {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     while (-not $p.HasExited) {
         if (-not $url) {
-            $m = Select-String -Path $log -Pattern 'http://127\.0\.0\.1:\d+/' -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($m) { $url = $m.Matches[0].Value }
+            $m = Select-String -Path $log -Pattern 'http://127\.0\.0\.1:\d+/' -Encoding UTF8 -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($m) {
+                $url = $m.Matches[0].Value
+                # o navegador ja vai abrir: o aviso mais importante aparece agora, nao so quando o servidor responder
+                Ui-Line 'iniciando' '' 'DarkGreen'
+                Write-Host ("`r  NAO feche esta janela enquanto usa o Fatura OCR.".PadRight(78)) -ForegroundColor Yellow
+            }
         }
         if ($url -and $t % 4 -eq 0) {
             try { if ((Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2).StatusCode -eq 200) { break } } catch { }
@@ -115,8 +122,6 @@ try {
     }
     if (-not $p.HasExited) {
         Ui-Ok 'iniciando' 'ONLINE'
-        Write-Host ''
-        Write-Host '  NAO feche esta janela enquanto usa o Fatura OCR.' -ForegroundColor Yellow
         Write-Host "  $url" -ForegroundColor DarkGray
         Write-Host ''
         $sw.Restart(); $ping = '...'; $next = 0
@@ -138,10 +143,11 @@ try {
     }
     # o servidor parou sozinho (erro): mostra o fim do log e o que fazer
     $p.WaitForExit()
+    Ui-Cursor $true
     Write-Host ''
     if ($p.ExitCode -ne 0) {
         Write-Host "  O Fatura OCR fechou com um erro (codigo $($p.ExitCode))." -ForegroundColor Red
-        Get-Content -Path "$log.err", $log -Tail 8 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+        Get-Content -Path "$log.err", $log -Tail 8 -Encoding UTF8 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
         Write-Host '  Tente abrir o atalho de novo. Se continuar, abra o instalador de novo.'
         Read-Host '  Aperte Enter para fechar esta janela'
     }

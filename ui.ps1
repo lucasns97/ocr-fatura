@@ -2,7 +2,7 @@
 # So ASCII neste arquivo (o PowerShell 5 do Windows estraga acentos): os blocos e simbolos vem de [char].
 # Com a saida redirecionada (CI, log) nao ha animacao: so linhas simples. FATURA_OCR_FANCY=1 forca a animacao.
 
-$global:FUiFancy = [bool]$env:FATURA_OCR_FANCY -or -not ([Console]::IsOutputRedirected -or $env:CI)
+$global:FUiFancy = ($env:FATURA_OCR_FANCY -eq '1') -or -not ([Console]::IsOutputRedirected -or $env:CI)
 $global:FUiB = @{ full = [string][char]0x2588; dark = [string][char]0x2593; mid = [string][char]0x2592; light = [string][char]0x2591 }
 $global:FUiSpin = @('|', '/', '-', '\')
 
@@ -28,7 +28,9 @@ function Ui-Banner {
         # chuva de 0 e 1 por um instante, depois o logo aparece linha a linha
         try {
             Ui-Cursor $false
-            $top = [Console]::CursorTop
+            # reserva as linhas antes (no fim da tela, desenhar rolaria lixo para cima)
+            foreach ($l in $logo) { Write-Host '' }
+            $top = [Console]::CursorTop - $logo.Count
             $rnd = New-Object Random
             for ($f = 0; $f -lt 10; $f++) {
                 [Console]::SetCursorPosition(0, $top)
@@ -59,13 +61,15 @@ function Ui-Line([string]$label, [string]$tail, [string]$color = 'Green', [switc
     if ($global:FUiFancy) {
         Write-Host -NoNewline "`r  > " -ForegroundColor DarkGreen
         Write-Host -NoNewline ($label + $dots) -ForegroundColor Gray
-        Write-Host -NoNewline (Ui-Fit $tail 46) -ForegroundColor $color
+        # cabe na janela: uma linha que quebra faria cada quadro da animacao virar uma linha nova
+        $w = 46; try { $w = [Math]::Min(46, [Math]::Max(10, [Console]::WindowWidth - 5 - $label.Length - $dots.Length)) } catch { }
+        Write-Host -NoNewline (Ui-Fit $tail $w) -ForegroundColor $color
         if ($Final) { Write-Host '' }
     } elseif ($Final) {
         Write-Host ('  > ' + $label + $dots + $tail.Trim())
     }
 }
-function Ui-Ok([string]$label, [string]$what = 'OK') { Ui-Line $label $what 'Green' -Final }
+function Ui-Ok([string]$label, [string]$what = 'OK', [string]$color = 'Green') { Ui-Line $label $what $color -Final }
 
 # faixa que vai e volta (scanner), em blocos
 function Ui-Scanner([int]$tick, [int]$w = 12) {
@@ -90,7 +94,7 @@ function Ui-Process([string]$label, [string]$file, [string]$arguments, [string]$
         while (-not $p.HasExited) {
             $last = ''
             try {
-                $tail = Get-Content -Path $err, $out -Tail 1 -ErrorAction SilentlyContinue | Where-Object { $_.Trim() } | Select-Object -Last 1
+                $tail = Get-Content -Path $err, $out -Tail 1 -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_.Trim() } | Select-Object -Last 1
                 if ($tail) { $last = Ui-Plain ([string]$tail) }
             } catch { }
             Ui-Line $label ((Ui-Scanner $t) + '  ' + $global:FUiSpin[$t % 4] + ' ' + $last) 'DarkGreen'
@@ -101,7 +105,7 @@ function Ui-Process([string]$label, [string]$file, [string]$arguments, [string]$
         Ui-Cursor $true
         if ($p.ExitCode -ne 0) {
             Ui-Line $label "ERRO (codigo $($p.ExitCode))" 'Red' -Final
-            Get-Content -Path $err, $out -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+            Get-Content -Path $err, $out -Tail 15 -Encoding UTF8 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
             throw "$label falhou (codigo $($p.ExitCode))."
         }
         Ui-Ok $label
@@ -126,7 +130,7 @@ function Ui-Download([string]$label, [string]$url, [string]$dest) {
         }
         if ($task.IsFaulted) { throw $task.Exception.GetBaseException() }
         Ui-Ok $label ('OK  (' + (Ui-Size (Get-Item $dest).Length) + ')')
-    } finally { Ui-Cursor $true; $wc.Dispose() }
+    } finally { Ui-Cursor $true; if (-not $task.IsCompleted) { $wc.CancelAsync() }; $wc.Dispose() }
 }
 
 function Ui-Box([string]$color, [string[]]$lines) {

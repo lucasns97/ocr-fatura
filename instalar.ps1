@@ -31,7 +31,7 @@ try {
 } catch { }
 if (-not $uiOk) {
     function Ui-Banner { Write-Host ''; Write-Host '  FATURA OCR' -ForegroundColor Green; Write-Host '' }
-    function Ui-Ok([string]$label, [string]$what = 'OK') { Write-Host "  > $label ... $what" -ForegroundColor Green }
+    function Ui-Ok([string]$label, [string]$what = 'OK', [string]$color = 'Green') { Write-Host "  > $label ... $what" -ForegroundColor $color }
     function Ui-Process([string]$label, [string]$file, [string]$arguments, [string]$dir = (Get-Location).Path) {
         $p = Start-Process -FilePath $file -ArgumentList $arguments -WorkingDirectory $dir -NoNewWindow -PassThru -Wait
         if ($p.ExitCode -ne 0) { throw "$label falhou (codigo $($p.ExitCode))." }
