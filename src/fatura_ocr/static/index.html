@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fatura OCR</title>
+<link rel="icon" type="image/svg+xml" href="/static/icon.svg">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body data-token="__TOKEN__" data-year="__DEFAULT_YEAR__" data-month="__DEFAULT_MONTH__">
 <header class="top">
-  <div class="brand"><span class="logo" aria-hidden="true">R$</span><h1>Fatura OCR</h1></div>
+  <div class="brand"><img class="logo" src="/static/icon.svg" alt="" width="38" height="38"><h1>Fatura OCR</h1></div>
   <span class="pill" title="O programa roda só neste computador">Roda localmente · nada sai do seu computador</span>
 </header>
 
@@ -62,6 +63,7 @@
     </div>
 
     <div id="tab-tabela" class="card tabpanel">
+      <div id="strip" class="strip" aria-label="Números da tabela"></div>
       <div class="toolbar">
         <button id="add">+ Linha</button>
         <button id="save" class="primary" disabled>Salvar alterações</button>

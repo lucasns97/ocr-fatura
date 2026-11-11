@@ -37,7 +37,7 @@ def app_home() -> Path:
     return Path(os.environ.get("FATURA_OCR_HOME") or Path.home() / ".fatura-ocr")
 
 
-ASSETS = ("app.js", "money.js", "stream.js", "style.css")  # arquivos da página; todos ganham ?v= (cache)
+ASSETS = ("app.js", "money.js", "stream.js", "style.css", "icon.svg")  # arquivos da página; todos ganham ?v= (cache)
 
 
 class _Stopped(Exception):

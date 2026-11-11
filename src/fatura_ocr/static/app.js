@@ -441,25 +441,26 @@ function hbars(title, pairs, max = 8) {
   if (pairs.length > max) list = pairs.slice(0, max - 1).concat([["Demais", pairs.slice(max - 1).reduce((s, p) => s + p[1], 0)]]);
   const top = Math.max(...list.map((p) => p[1]), 1);
   const body = list.map(([k, v]) => `<div class="hbar${k === "Demais" && pairs.length > max ? " rest" : ""}"><span class="nm" title="${esc(k)}">${esc(k)}</span><span class="tr"><span class="fl" style="display:block;width:${(v / top * 100).toFixed(1)}%" data-tip="${esc(k)}: ${fmt(v)}" tabindex="0"></span></span><span class="vl">${fmt(v)}</span></div>`).join("");
-  return `<div class="card chart"><h3>${esc(title)}</h3>${body || '<p class="muted">Sem dados.</p>'}</div>`;
+  return `<div class="card chart w2"><h3>${esc(title)}</h3>${body || '<p class="muted">Sem dados.</p>'}</div>`;
 }
 function monthColumns(rows) {
   const m = new Map();
   rows.forEach((r) => { const k = r.data.slice(6) + "-" + r.data.slice(3, 5); m.set(k, (m.get(k) || 0) + r.valor_centavos); });
-  const keys = [...m.keys()].sort(); if (!keys.length) return `<div class="card chart"><h3>Compras por mês de origem</h3><p class="muted">Sem dados.</p></div>`;
-  const W = 520, H = 170, pad = 22, top = Math.max(...m.values(), 1), bw = Math.min(34, (W - pad) / keys.length - 6);
+  const keys = [...m.keys()].sort(); if (!keys.length) return `<div class="card chart w4"><h3>Compras por mês de origem</h3><p class="muted">Sem dados.</p></div>`;
+  // largura do desenho = largura da página (o gráfico ocupa a linha toda): texto sem esticar nem encolher
+  const W = Math.max(320, Math.min(1040, ($("main").clientWidth || 600) - 90)), H = 170, pad = 22, top = Math.max(...m.values(), 1), bw = Math.min(34, (W - pad) / keys.length - 6);
   const bars = keys.map((k, i) => {
     const v = m.get(k), h = Math.max(2, (v / top) * (H - 46)), x = pad + i * ((W - pad) / keys.length) + 3, y = H - 22 - h;
     const label = k.slice(5) + "/" + k.slice(2, 4);
     const short = v >= 100000 ? "R$ " + (v / 100000).toFixed(1).replace(".", ",") + " mil" : "R$ " + Math.round(v / 100);
     return `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="4" data-tip="${label}: ${fmt(v)}" tabindex="0"/><text class="val" x="${x + bw / 2}" y="${y - 5}" text-anchor="middle">${short}</text><text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${label}</text>`;
   }).join("");
-  return `<div class="card chart"><h3>Compras por mês de origem</h3><svg class="cols" viewBox="0 0 ${W} ${H}" role="img" aria-label="Valor das compras por mês da compra original">${`<line x1="${pad}" x2="${W}" y1="${H - 22}" y2="${H - 22}"/>`}${bars}</svg><p class="muted small">Parcelas aparecem no mês da compra original.</p></div>`;
+  return `<div class="card chart w4"><h3>Compras por mês de origem</h3><svg class="cols" viewBox="0 0 ${W} ${H}" role="img" aria-label="Valor das compras por mês da compra original">${`<line x1="${pad}" x2="${W}" y1="${H - 22}" y2="${H - 22}"/>`}${bars}</svg><p class="muted small">Parcelas aparecem no mês da compra original.</p></div>`;
 }
-function splitBar(rows) {
+function splitBar(rows) { // à vista × parcelado, dentro do bloco do total
   const a = rows.filter((r) => !/^Parcela/.test(r.tipo)).reduce((s, r) => s + r.valor_centavos, 0);
   const p = rows.filter((r) => /^Parcela/.test(r.tipo)).reduce((s, r) => s + r.valor_centavos, 0), t = a + p || 1;
-  return `<div class="card chart"><h3>À vista × parcelado</h3><div class="stack" role="img" aria-label="À vista ${fmt(a)}, parcelado ${fmt(p)}">
+  return `<div class="split"><div class="stack" role="img" aria-label="À vista ${fmt(a)}, parcelado ${fmt(p)}">
     <span style="flex:${a};background:var(--series-1)" data-tip="À vista: ${fmt(a)} (${(a / t * 100).toFixed(0)}%)"></span>
     <span style="flex:${p};background:var(--series-2)" data-tip="Parcelado: ${fmt(p)} (${(p / t * 100).toFixed(0)}%)"></span></div>
     <div class="legend"><span><i style="background:var(--series-1)"></i>À vista ${fmt(a)}</span><span><i style="background:var(--series-2)"></i>Parcelado ${fmt(p)}</span></div></div>`;
@@ -471,16 +472,18 @@ function renderSummary() {
   const big = spend.reduce((b, r) => (!b || r.valor_centavos > b.valor_centavos ? r : b), null);
   // conferência recalculada com as linhas atuais (edições salvas incluídas)
   const rec = reconcile(rows);
-  let recK = "";
-  if (rec) {
-    const sub = rec.ok ? "Total " + fmt(rec.total) : (rec.diff < 0 ? "Faltam " : "Sobram ") + fmt(Math.abs(rec.diff)) + " vs. " + fmt(rec.total);
-    recK = `<div class="kpi"><div class="l">Conferência com o total</div><div class="v">${rec.ok ? "✓ Bate" : "✗ Difere"}</div><div class="s">${sub}</div></div>`;
-  }
-  el.innerHTML = `<div class="kpis">
-    <div class="kpi"><div class="l">Total em compras</div><div class="v">${fmt(total)}</div><div class="s">${spend.length} lançamentos</div></div>
+  const toReview = rows.filter((r) => r.revisar).length;
+  let tag = "";
+  if (rec) tag = rec.ok ? `<span class="tag">✓ Bate com o total da fatura</span>`
+    : `<span class="tag bad">${rec.diff < 0 ? "Faltam " : "Sobram "}${fmt(Math.abs(rec.diff))} vs. total ${fmt(rec.total)}</span>`;
+  $("#strip").innerHTML = `<span>Compras<b>${fmt(total)}</b></span><span>Pagamentos e estornos<b>${fmt(cr)}</b></span>`
+    + `<span>Lançamentos<b>${rows.length}</b></span>` + (toReview ? `<span class="warn">Revisar<b>${toReview}</b></span>` : "");
+  el.innerHTML = `<div class="bento">
+    <div class="card hero"><div><div class="l">Total em compras</div><div class="v">${fmt(total)}</div><div class="s">${spend.length} lançamento(s)</div></div>${splitBar(spend)}${tag}</div>
     <div class="kpi"><div class="l">Ticket médio</div><div class="v">${fmt(spend.length ? Math.round(total / spend.length) : 0)}</div><div class="s">por compra</div></div>
     <div class="kpi"><div class="l">Maior compra</div><div class="v">${big ? fmt(big.valor_centavos) : "–"}</div><div class="s">${big ? esc(big.lancamento) : ""}</div></div>
-    <div class="kpi"><div class="l">Pagamentos e estornos</div><div class="v">${fmt(cr)}</div><div class="s">${credits.length} lançamento(s)</div></div>${recK}</div>
-    <div class="charts">${hbars("Gasto por categoria", sumBy(spend, (r) => r.categoria || "SEM CATEGORIA"))}${hbars("Maiores estabelecimentos", sumBy(spend, (r) => r.lancamento || "(sem nome)"), 6)}${splitBar(spend)}${monthColumns(spend)}</div>
+    <div class="kpi"><div class="l">Pagamentos e estornos</div><div class="v">${fmt(cr)}</div><div class="s">${credits.length} lançamento(s)</div></div>
+    <div class="kpi"><div class="l">Para revisar</div><div class="v">${toReview}</div><div class="s">${toReview ? "linhas com leitura incerta" : "nenhuma leitura incerta"}</div></div>
+    ${hbars("Gasto por categoria", sumBy(spend, (r) => r.categoria || "SEM CATEGORIA"))}${hbars("Maiores estabelecimentos", sumBy(spend, (r) => r.lancamento || "(sem nome)"), 6)}${monthColumns(spend)}</div>
     <p class="muted small">Os gráficos usam as linhas da tabela (já com suas edições salvas). Pagamentos e estornos ficam fora dos gráficos.</p>`;
 }
